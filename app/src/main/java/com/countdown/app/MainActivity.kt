@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -58,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -90,7 +93,9 @@ import com.countdown.app.util.NotificationHelper
 import com.countdown.app.widget.CountdownWidgetReceiver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
 
@@ -191,6 +196,7 @@ fun MainScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
+    var showWidgetPrompt by remember { mutableStateOf(false) }
 
     val daysRemaining = DateCalculator.daysRemaining(countdownData.targetDate)
     val targetReached = DateCalculator.isTargetReached(countdownData.targetDate)
@@ -410,6 +416,41 @@ fun MainScreen(
                     snackbarHostState.showSnackbar("设置已保存")
                 }
                 showSettings = false
+                if (newData.reminderEnabled) {
+                    showWidgetPrompt = true
+                }
+            }
+        )
+    }
+
+    // Widget prompt dialog
+    if (showWidgetPrompt) {
+        AlertDialog(
+            onDismissRequest = { showWidgetPrompt = false },
+            title = { Text("添加桌面小组件") },
+            text = { Text("倒计时提醒已设置完成！建议添加桌面小组件，无需打开应用即可随时查看剩余天数。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val appWidgetManager = context.getSystemService(AppWidgetManager::class.java)
+                        val componentName = ComponentName(context, CountdownWidgetReceiver::class.java)
+                        if (appWidgetManager?.isRequestPinAppWidgetSupported == true) {
+                            appWidgetManager.requestPinAppWidget(componentName, null, null)
+                        } else {
+                            Toast.makeText(context, "请长按桌面空白处，选择「倒计时提醒」小组件", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "请长按桌面空白处，选择「倒计时提醒」小组件", Toast.LENGTH_LONG).show()
+                    }
+                    showWidgetPrompt = false
+                }) {
+                    Text("去添加")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWidgetPrompt = false }) {
+                    Text("以后再说")
+                }
             }
         )
     }
@@ -721,53 +762,25 @@ fun SettingsDialog(
         )
     }
 
-    // Date Picker (simplified using dialog with year/month/day)
+    // Date Picker using Material 3 DatePickerDialog
     if (showDatePicker) {
-        var year by remember { mutableIntStateOf(targetDate.year) }
-        var month by remember { mutableIntStateOf(targetDate.monthValue) }
-        var day by remember { mutableIntStateOf(targetDate.dayOfMonth) }
-
-        AlertDialog(
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = targetDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
-            title = { Text("选择目标日期") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = "$year",
-                        onValueChange = { year = it.toIntOrNull() ?: year },
-                        label = { Text("年") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = "$month",
-                        onValueChange = {
-                            val m = it.toIntOrNull() ?: month
-                            month = m.coerceIn(1, 12)
-                        },
-                        label = { Text("月 (1-12)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = "$day",
-                        onValueChange = {
-                            val d = it.toIntOrNull() ?: day
-                            day = d.coerceIn(1, 31)
-                        },
-                        label = { Text("日 (1-31)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
             confirmButton = {
                 TextButton(onClick = {
-                    try {
-                        targetDate = LocalDate.of(year, month, day)
-                        showDatePicker = false
-                    } catch (_: Exception) {
-                        Toast.makeText(context, "日期无效", Toast.LENGTH_SHORT).show()
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selected = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        targetDate = selected
                     }
+                    showDatePicker = false
                 }) {
                     Text("确定")
                 }
@@ -777,6 +790,8 @@ fun SettingsDialog(
                     Text("取消")
                 }
             }
-        )
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }
