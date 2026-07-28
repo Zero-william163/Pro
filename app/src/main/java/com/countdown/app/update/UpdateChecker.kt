@@ -71,10 +71,10 @@ object UpdateChecker {
                 return@withContext Result.failure(Exception("No APK found in release"))
             }
 
-            // Parse version code from tag (e.g., "1.0.0" -> 1000000 rough compare)
+            // Parse version code from tag (e.g., "1.0.0" -> 10000)
             val remoteVersionCode = parseVersionCode(tagName)
-            val isNewer = remoteVersionCode > currentVersionCode ||
-                    (remoteVersionCode == currentVersionCode && tagName != currentVersionName)
+            val currentParsedCode = parseVersionCode(currentVersionName)
+            val isNewer = remoteVersionCode > currentParsedCode
 
             Result.success(
                 UpdateInfo(
