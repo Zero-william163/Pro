@@ -73,7 +73,6 @@ class DownloadService : Service() {
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/octet-stream")
-                .header("Authorization", "token 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")
                 .build()
 
             val response = client.newCall(request).execute()

@@ -184,7 +184,7 @@ fun MainScreen(
     repository: CountdownRepository,
     onRequestAlarmPermission: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
-    onCheckUpdate: ((Result<UpdateChecker.UpdateInfo>) -> Unit) -> Unit,
+    onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
     onStartDownload: (String, String) -> Unit,
     onUpdateWidget: () -> Unit
 ) {
@@ -204,7 +204,7 @@ fun MainScreen(
     }
 
     var showSettings by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showWidgetPrompt by remember { mutableStateOf(false) }
 
@@ -227,17 +227,25 @@ fun MainScreen(
                         isCheckingUpdate = true
                         onCheckUpdate { result ->
                             isCheckingUpdate = false
-                            result.onSuccess { info ->
-                                if (info.isNewer) {
-                                    showUpdateDialog = info
-                                } else {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("当前已是最新版本")
+                            result.onSuccess { updateResult ->
+                                when (updateResult) {
+                                    is UpdateChecker.UpdateResult.UpdateAvailable -> {
+                                        showUpdateDialog = updateResult
+                                    }
+                                    is UpdateChecker.UpdateResult.UpToDate -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("当前已是最新版本")
+                                        }
+                                    }
+                                    is UpdateChecker.UpdateResult.LocalNewer -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("当前版本高于最新正式版")
+                                        }
                                     }
                                 }
                             }.onFailure { e ->
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("检查更新失败: ${e.message}")
+                                    snackbarHostState.showSnackbar("检查更新失败，请稍后重试")
                                 }
                             }
                         }
@@ -495,21 +503,33 @@ fun MainScreen(
         )
     }
 
-    // Update Dialog
+    // Update Dialog - only shown when a genuine update is available
     showUpdateDialog?.let { updateInfo ->
         AlertDialog(
             onDismissRequest = { showUpdateDialog = null },
-            title = { Text("发现新版本 v${updateInfo.versionName}") },
+            title = { Text("发现新版本 v${updateInfo.remoteVersion.tagName}") },
             text = {
                 Column {
-                    Text("当前版本将通过 GitHub 下载更新。", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "当前版本: ${updateInfo.installedVersion.versionName}\n" +
+                        "新版本: ${updateInfo.remoteVersion.tagName}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(updateInfo.releaseNotes, style = MaterialTheme.typography.bodySmall)
+                    if (updateInfo.remoteVersion.releaseNotes.isNotBlank()) {
+                        Text(
+                            updateInfo.remoteVersion.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onStartDownload(updateInfo.downloadUrl, updateInfo.versionName)
+                    onStartDownload(
+                        updateInfo.remoteVersion.downloadUrl,
+                        updateInfo.remoteVersion.tagName
+                    )
                     showUpdateDialog = null
                     scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
                 }) {
