@@ -9,17 +9,31 @@ import android.provider.Settings
 import android.util.Log
 import com.countdown.app.receiver.AlarmReceiver
 
+/**
+ * 闹钟调度器（已重构）
+ *
+ * 支持：
+ * - 每日重复闹钟（使用 setAlarmClock 最可靠）
+ * - 一次性闹钟（用于稍后提醒）
+ * - 多版本兼容（Android 8 ~ Android 16）
+ * - 自动降级策略
+ */
 object AlarmScheduler {
 
-    const val CHANNEL_ID = "countdown_daily_reminder"
-    private const val REQUEST_CODE = 1001
+    const val CHANNEL_ID_ALARM = "countdown_alarm_channel"
+    const val CHANNEL_ID_REMINDER = "countdown_reminder_channel"
+
+    private const val REQUEST_CODE_DAILY = 1001
+    private const val REQUEST_CODE_ONESHOT = 1002
     private const val TAG = "AlarmScheduler"
+
+    // ==================== 每日重复闹钟 ====================
 
     fun scheduleDailyAlarm(context: Context, hour: Int, minute: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-        // Cancel any existing alarm first
-        cancelAlarm(context)
+        // 先取消已有的每日闹钟
+        cancelDailyAlarm(context)
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = AlarmReceiver.ACTION_DAILY_REMINDER
@@ -27,88 +41,168 @@ object AlarmScheduler {
 
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            REQUEST_CODE,
+            REQUEST_CODE_DAILY,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val triggerTime = DateCalculator.getNextAlarmTimeMillis(hour, minute)
+        Log.d(TAG, "Scheduling daily alarm at ${DateCalculator.formatDateTime(triggerTime)}")
 
         try {
-            when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                    // Android 12+: check if we can schedule exact alarms
-                    if (alarmManager.canScheduleExactAlarms()) {
-                        alarmManager.setAlarmClock(
-                            AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
-                            pendingIntent
-                        )
-                        Log.d(TAG, "Scheduled exact alarm via setAlarmClock (API 31+)")
-                    } else {
-                        // Fallback to inexact alarm
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.RTC_WAKEUP,
-                            triggerTime,
-                            pendingIntent
-                        )
-                        Log.d(TAG, "Scheduled inexact alarm (no exact permission)")
-                    }
-                }
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        pendingIntent
-                    )
-                    Log.d(TAG, "Scheduled exact alarm via setExactAndAllowWhileIdle (API 23+)")
-                }
-                else -> {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        pendingIntent
-                    )
-                    Log.d(TAG, "Scheduled exact alarm via setExact")
-                }
-            }
+            scheduleExactAlarmCompat(alarmManager, triggerTime, pendingIntent)
         } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException scheduling alarm", e)
-            // Fallback
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.set(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerTime,
-                        pendingIntent
-                    )
-                }
-            } catch (e2: Exception) {
-                Log.e(TAG, "Fallback alarm scheduling failed", e2)
-            }
+            Log.e(TAG, "SecurityException scheduling daily alarm", e)
+            scheduleInexactAlarmFallback(alarmManager, triggerTime, pendingIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception scheduling daily alarm", e)
         }
     }
 
-    fun cancelAlarm(context: Context) {
+    fun cancelDailyAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = AlarmReceiver.ACTION_DAILY_REMINDER
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            REQUEST_CODE,
+            REQUEST_CODE_DAILY,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
-        Log.d(TAG, "Cancelled alarm")
+        Log.d(TAG, "Cancelled daily alarm")
     }
+
+    // ==================== 一次性闹钟（稍后提醒用） ====================
+
+    fun scheduleOneShotAlarm(
+        context: Context,
+        triggerTimeMillis: Long,
+        eventContent: String = "",
+        daysRemaining: Long = 0,
+        targetReached: Boolean = false
+    ) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = AlarmReceiver.ACTION_DAILY_REMINDER
+            putExtra("event_content", eventContent)
+            putExtra("days_remaining", daysRemaining)
+            putExtra("target_reached", targetReached)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_ONESHOT,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        Log.d(TAG, "Scheduling one-shot alarm at ${DateCalculator.formatDateTime(triggerTimeMillis)}")
+
+        try {
+            scheduleExactAlarmCompat(alarmManager, triggerTimeMillis, pendingIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule one-shot alarm", e)
+            scheduleInexactAlarmFallback(alarmManager, triggerTimeMillis, pendingIntent)
+        }
+    }
+
+    // ==================== 取消所有闹钟 ====================
+
+    fun cancelAlarm(context: Context) {
+        cancelDailyAlarm(context)
+
+        // 同时取消一次性闹钟
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = AlarmReceiver.ACTION_DAILY_REMINDER
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_ONESHOT,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+    }
+
+    // ==================== 兼容性调度方法 ====================
+
+    private fun scheduleExactAlarmCompat(
+        alarmManager: AlarmManager,
+        triggerTime: Long,
+        pendingIntent: PendingIntent
+    ) {
+        when {
+            // Android 12+ (API 31+): 优先使用 setAlarmClock，最可靠
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAlarmClock(
+                        AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled via setAlarmClock (API 31+)")
+                } else {
+                    // 没有精确闹钟权限，使用降级方案
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                    Log.d(TAG, "Scheduled via setAndAllowWhileIdle (no exact permission)")
+                }
+            }
+            // Android 6+ (API 23+): setExactAndAllowWhileIdle
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled via setExactAndAllowWhileIdle (API 23+)")
+            }
+            // Android 5 (API 21-22): setExact
+            else -> {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled via setExact")
+            }
+        }
+    }
+
+    private fun scheduleInexactAlarmFallback(
+        alarmManager: AlarmManager,
+        triggerTime: Long,
+        pendingIntent: PendingIntent
+    ) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            }
+            Log.d(TAG, "Scheduled fallback inexact alarm")
+        } catch (e: Exception) {
+            Log.e(TAG, "Fallback scheduling also failed", e)
+        }
+    }
+
+    // ==================== 权限检测 ====================
 
     fun canScheduleExactAlarms(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -118,6 +212,8 @@ object AlarmScheduler {
             true
         }
     }
+
+    // ==================== 打开设置页面 ====================
 
     fun openExactAlarmSettings(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

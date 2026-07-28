@@ -1,12 +1,9 @@
 package com.countdown.app
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
-import android.os.Build
 import com.countdown.app.data.CountdownRepository
 import com.countdown.app.util.AlarmScheduler
+import com.countdown.app.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,35 +15,21 @@ class CountdownApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
 
-        // Ensure alarm is scheduled on app start if reminder is enabled
+        // 创建通知渠道（使用新版多渠道方案）
+        NotificationHelper.createNotificationChannels(this)
+
+        // 确保闹钟在应用启动时已注册（如果提醒已启用）
         applicationScope.launch {
             val repository = CountdownRepository.getInstance(this@CountdownApplication)
             val data = repository.getCountdownDataSync()
             if (data.reminderEnabled) {
-                AlarmScheduler.scheduleDailyAlarm(this@CountdownApplication, data.reminderTimeHour, data.reminderTimeMinute)
+                AlarmScheduler.scheduleDailyAlarm(
+                    this@CountdownApplication,
+                    data.reminderTimeHour,
+                    data.reminderTimeMinute
+                )
             }
-        }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                AlarmScheduler.CHANNEL_ID,
-                getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getString(R.string.notification_channel_description)
-                // AlarmService plays its own sound via MediaPlayer, so the channel
-                // should not have a default sound to avoid double audio.
-                setSound(null, null)
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500)
-                setShowBadge(true)
-            }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
         }
     }
 }

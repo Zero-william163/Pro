@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 应用名称 -->
     <string name="app_name">目标倒计时</string>
+
+    <!-- 主界面 -->
     <string name="event_content_hint">输入事件名称，例如：高考</string>
     <string name="target_date_label">目标日期</string>
     <string name="reminder_time_label">每日提醒时间</string>
@@ -14,9 +17,6 @@
     <string name="next_reminder">下次提醒</string>
     <string name="reminder_enabled">提醒已启用</string>
     <string name="reminder_disabled">提醒已关闭</string>
-    <string name="notification_channel_name">每日倒计时提醒</string>
-    <string name="notification_channel_description">每天在设定时间提醒您距离目标日期还有多少天</string>
-    <string name="full_screen_title">倒计时提醒</string>
     <string name="dismiss">关闭</string>
     <string name="confirm">确认</string>
     <string name="check_update">检查更新</string>
@@ -35,6 +35,42 @@
     <string name="goto_settings">前往设置</string>
     <string name="error_load_data">加载数据失败</string>
     <string name="error_save_data">保存失败</string>
+
+    <!-- 全屏闹钟 -->
+    <string name="full_screen_title">倒计时提醒</string>
+    <string name="alarm_notification_title">⏰ 倒计时提醒</string>
+    <string name="reminder_notification_title">📅 倒计时提醒</string>
+    <string name="alarm_service_title">闹钟正在响</string>
+    <string name="action_dismiss">关闭闹钟</string>
+    <string name="action_snooze">稍后提醒</string>
+    <string name="snooze_scheduled_title">稍后提醒已设置</string>
+
+    <!-- 通知渠道 -->
+    <string name="channel_name_alarm">闹钟提醒</string>
+    <string name="channel_desc_alarm">全屏闹钟提醒，包含声音和震动</string>
+    <string name="channel_name_reminder">普通提醒</string>
+    <string name="channel_desc_reminder">每日倒计时提示通知</string>
+    <string name="channel_name_snooze">稍后提醒</string>
+    <string name="channel_desc_snooze">稍后提醒的确认通知</string>
+
+    <!-- 权限中心 -->
+    <string name="permission_center_title">权限中心</string>
+    <string name="permission_status_granted">已开启</string>
+    <string name="permission_status_denied">未开启</string>
+    <string name="permission_action_open">立即开启</string>
+    <string name="permission_action_settings">前往设置</string>
+
+    <!-- 权限缺失提示 -->
     <string name="error_permission_alarm">需要精确闹钟权限，请在系统设置中开启</string>
     <string name="error_permission_notification">需要通知权限，请在系统设置中开启</string>
+    <string name="error_permission_full_screen_intent">需要全屏通知权限，否则锁屏时无法弹出提醒</string>
+    <string name="error_permission_battery">建议忽略电池优化，防止系统限制后台运行</string>
+    <string name="error_permission_overlay">建议开启悬浮窗权限，作为全屏提醒的降级方案</string>
+
+    <!-- 华为专项 -->
+    <string name="huawei_tip_title">华为设备提示</string>
+    <string name="huawei_tip_desc">华为手机有严格的后台管理机制，建议完成以下设置：</string>
+    <string name="huawei_tip_auto_start">1. 允许应用自启动</string>
+    <string name="huawei_tip_battery">2. 电池优化设为「手动管理」</string>
+    <string name="huawei_tip_lock">3. 加入锁屏清理白名单</string>
 </resources>

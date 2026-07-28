@@ -2,19 +2,43 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- ==================== 核心权限 ==================== -->
+    <!-- 精确闹钟权限 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Android 13+ 系统闹钟权限（无需用户手动授权） -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 全屏通知权限（Android 14+ 需要声明） -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- 通知权限（Android 13+ 运行时权限） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 唤醒屏幕和保持唤醒 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 震动 -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 前台服务 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- 开机启动 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 悬浮窗权限（降级方案用） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 忽略电池优化 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- 网络权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 安装 APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".CountdownApplication"
@@ -29,7 +53,9 @@
         android:usesCleartextTraffic="false"
         tools:targetApi="34">
 
-        <!-- Main Activity -->
+        <!-- ==================== Activities ==================== -->
+
+        <!-- 主 Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -40,7 +66,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Full Screen Alarm Activity -->
+        <!-- 权限中心页面 -->
+        <activity
+            android:name=".ui.permission.PermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Countdown"
+            android:label="@string/permission_center_title" />
+
+        <!-- 全屏闹钟 Activity -->
+        <!-- 关键属性说明：
+             - excludeFromRecents: 不在最近任务列表显示
+             - showOnLockScreen: 锁屏时显示
+             - showWhenLocked: 锁屏时可见
+             - turnScreenOn: 自动点亮屏幕
+             - taskAffinity: 独立任务栈，避免与主 Activity 混合 -->
         <activity
             android:name=".ui.alarm.AlarmActivity"
             android:excludeFromRecents="true"
@@ -48,16 +87,19 @@
             android:launchMode="singleTask"
             android:showOnLockScreen="true"
             android:showWhenLocked="true"
+            android:taskAffinity="com.countdown.app.alarm"
             android:turnScreenOn="true"
             android:theme="@style/Theme.Countdown.FullScreen" />
 
-        <!-- Alarm Receiver -->
+        <!-- ==================== Receivers ==================== -->
+
+        <!-- 闹钟触发接收器 -->
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:enabled="true"
             android:exported="false" />
 
-        <!-- Boot Receiver -->
+        <!-- 开机启动接收器 -->
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"
@@ -71,7 +113,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Time Change Receiver -->
+        <!-- 时间变化接收器 -->
         <receiver
             android:name=".receiver.TimeChangeReceiver"
             android:enabled="true"
@@ -83,20 +125,29 @@
             </intent-filter>
         </receiver>
 
-        <!-- Alarm Foreground Service -->
+        <!-- 通知操作接收器（关闭/稍后提醒） -->
+        <receiver
+            android:name=".receiver.AlarmActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ==================== Services ==================== -->
+
+        <!-- 闹钟前台服务 -->
         <service
             android:name=".service.AlarmService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Update Download Service -->
+        <!-- 下载更新服务 -->
         <service
             android:name=".service.DownloadService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
-        <!-- Widget Receiver -->
+        <!-- ==================== Widget ==================== -->
+
         <receiver
             android:name=".widget.CountdownWidgetReceiver"
             android:enabled="true"
@@ -109,14 +160,14 @@
                 android:resource="@xml/countdown_widget_info" />
         </receiver>
 
-        <!-- Widget Update Service -->
         <service
             android:name=".widget.CountdownWidgetService"
             android:enabled="true"
             android:exported="false"
             android:permission="android.permission.BIND_REMOTEVIEWS" />
 
-        <!-- FileProvider for APK install -->
+        <!-- ==================== FileProvider ==================== -->
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -13,3 +13,8 @@ captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# 构建产物
+app/build/
+*.apk
+*.aab

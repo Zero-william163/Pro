@@ -13,6 +13,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * 闹钟触发接收器（已重构）
+ *
+ * 职责：
+ * - 接收每日闹钟广播
+ * - 启动 AlarmService 播放声音、震动、显示全屏通知
+ * - 自动重新注册第二天的闹钟
+ * - 处理一次性闹钟（稍后提醒）
+ */
 class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
@@ -21,7 +30,10 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_DAILY_REMINDER) return
+        if (intent.action != ACTION_DAILY_REMINDER) {
+            Log.w(TAG, "Received unknown action: ${intent.action}")
+            return
+        }
 
         Log.d(TAG, "Alarm received at ${System.currentTimeMillis()}")
 
@@ -31,16 +43,18 @@ class AlarmReceiver : BroadcastReceiver() {
                 val repository = CountdownRepository.getInstance(context)
                 val data = repository.getCountdownDataSync()
 
+                // 检查提醒是否启用
                 if (!data.reminderEnabled) {
                     Log.d(TAG, "Reminder disabled, skipping")
                     return@launch
                 }
 
+                // 计算倒计时数据
                 val daysRemaining = DateCalculator.daysRemaining(data.targetDate)
                 val targetReached = DateCalculator.isTargetReached(data.targetDate)
                 val eventContent = data.eventContent.ifEmpty { "目标" }
 
-                // Start AlarmService to play sound, vibrate, and show full-screen notification
+                // 启动 AlarmService（播放声音、震动、显示全屏通知）
                 val alarmIntent = Intent(context, AlarmService::class.java).apply {
                     action = AlarmService.ACTION_START_ALARM
                     putExtra(AlarmService.EXTRA_EVENT_CONTENT, eventContent)
@@ -48,8 +62,9 @@ class AlarmReceiver : BroadcastReceiver() {
                     putExtra(AlarmService.EXTRA_TARGET_REACHED, targetReached)
                 }
                 ContextCompat.startForegroundService(context, alarmIntent)
+                Log.d(TAG, "AlarmService started")
 
-                // Reschedule for next day
+                // 重新注册明天的闹钟
                 AlarmScheduler.scheduleDailyAlarm(
                     context,
                     data.reminderTimeHour,

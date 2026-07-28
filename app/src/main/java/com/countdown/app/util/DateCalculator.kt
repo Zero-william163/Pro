@@ -104,4 +104,19 @@ object DateCalculator {
             next.minute
         )
     }
+
+    /**
+     * Format epoch millis to date time string
+     */
+    fun formatDateTime(millis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String {
+        val dt = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), zoneId)
+        return String.format(
+            "%d年%02d月%02d日 %02d:%02d",
+            dt.year,
+            dt.monthValue,
+            dt.dayOfMonth,
+            dt.hour,
+            dt.minute
+        )
+    }
 }

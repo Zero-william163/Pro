@@ -40,15 +40,17 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -95,11 +97,13 @@ import androidx.lifecycle.lifecycleScope
 import com.countdown.app.data.CountdownData
 import com.countdown.app.data.CountdownRepository
 import com.countdown.app.service.DownloadService
+import com.countdown.app.ui.permission.PermissionActivity
 import com.countdown.app.ui.theme.CountdownTheme
 import com.countdown.app.update.UpdateChecker
 import com.countdown.app.util.AlarmScheduler
 import com.countdown.app.util.DateCalculator
 import com.countdown.app.util.NotificationHelper
+import com.countdown.app.util.PermissionChecker
 import com.countdown.app.widget.CountdownWidgetReceiver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -111,12 +115,16 @@ class MainActivity : ComponentActivity() {
 
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(this, "通知权限被拒绝，提醒功能可能无法正常工作", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request notification permission on Android 13+
+        // Android 13+ 请求通知权限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestNotificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -128,7 +136,7 @@ class MainActivity : ComponentActivity() {
             val darkTheme = when (themeMode.themeMode) {
                 CountdownData.THEME_DARK -> true
                 CountdownData.THEME_LIGHT -> false
-                else -> null // system default
+                else -> null
             }
 
             CountdownTheme(darkTheme = darkTheme ?: androidx.compose.foundation.isSystemInDarkTheme()) {
@@ -145,6 +153,9 @@ class MainActivity : ComponentActivity() {
                                 putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                             }
                             startActivity(intent)
+                        },
+                        onOpenPermissionCenter = {
+                            PermissionActivity.start(this)
                         },
                         onCheckUpdate = { onUpdateCheckResult ->
                             lifecycleScope.launch {
@@ -168,6 +179,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 每次回到主界面刷新小组件
+        updateWidgets()
+    }
+
     private fun updateWidgets() {
         val appWidgetManager = AppWidgetManager.getInstance(this)
         val componentName = ComponentName(this, CountdownWidgetReceiver::class.java)
@@ -184,6 +201,7 @@ fun MainScreen(
     repository: CountdownRepository,
     onRequestAlarmPermission: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
+    onOpenPermissionCenter: () -> Unit,
     onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
     onStartDownload: (String, String) -> Unit,
     onUpdateWidget: () -> Unit
@@ -195,7 +213,7 @@ fun MainScreen(
     val countdownData by repository.countdownDataFlow.collectAsState(initial = CountdownData())
     var currentTime by remember { mutableStateOf(DateCalculator.formatCurrentTime()) }
 
-    // Update current time every second
+    // 更新当前时间每秒
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = DateCalculator.formatCurrentTime()
@@ -207,6 +225,16 @@ fun MainScreen(
     var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showWidgetPrompt by remember { mutableStateOf(false) }
+
+    // 权限检测结果（用于显示顶部提示）
+    var permissionResult by remember {
+        mutableStateOf(PermissionChecker.checkAllPermissions(context))
+    }
+
+    // 重新检测权限
+    fun refreshPermissions() {
+        permissionResult = PermissionChecker.checkAllPermissions(context)
+    }
 
     val daysRemaining = DateCalculator.daysRemaining(countdownData.targetDate)
     val targetReached = DateCalculator.isTargetReached(countdownData.targetDate)
@@ -220,6 +248,15 @@ fun MainScreen(
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 ),
                 actions = {
+                    // 权限中心入口
+                    IconButton(onClick = onOpenPermissionCenter) {
+                        val hasIssues = !permissionResult.criticalGranted
+                        Icon(
+                            imageVector = if (hasIssues) Icons.Default.Warning else Icons.Default.Security,
+                            contentDescription = "权限中心",
+                            tint = if (hasIssues) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
@@ -277,70 +314,30 @@ fun MainScreen(
                 .alpha(contentAlpha),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Main countdown card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 20.dp)
-                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp))
-                    .animateContentSize(animationSpec = tween(durationMillis = 300)),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.Transparent
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            )
-                        )
-                        .padding(36.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = countdownData.eventContent.ifEmpty { "未设置事件" },
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = if (targetReached) "到达" else if (daysRemaining == 0L) "今天" else "$daysRemaining",
-                        modifier = Modifier.animateContentSize(animationSpec = tween(durationMillis = 300)),
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 120.sp,
-                        lineHeight = 124.sp
-                    )
-
-                    Text(
-                        text = if (targetReached) "" else if (daysRemaining <= 0) "天前" else "天",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "目标日期: ${DateCalculator.formatDate(countdownData.targetDate)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                }
+            // ===== 权限缺失提示栏（关键） =====
+            if (!permissionResult.criticalGranted) {
+                PermissionWarningCard(
+                    onClick = onOpenPermissionCenter,
+                    missingCount = permissionResult.items.count { it.isCritical && !it.isGranted }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Info cards
+            // 华为设备提示
+            if (permissionResult.isHuaweiDevice && !permissionResult.allGranted) {
+                HuaweiTipCard(onClick = onOpenPermissionCenter)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // ===== 主倒计时卡片 =====
+            MainCountdownCard(
+                eventContent = countdownData.eventContent,
+                daysRemaining = daysRemaining,
+                targetReached = targetReached,
+                targetDate = countdownData.targetDate
+            )
+
+            // ===== 信息卡片 =====
             InfoCard(
                 icon = Icons.Default.AccessTime,
                 title = "当前时间",
@@ -362,65 +359,26 @@ fun MainScreen(
                 valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
             )
 
-            // Permission warnings
+            // 旧版简单权限警告（保留作为兜底）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AlarmScheduler.canScheduleExactAlarms(context)) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onRequestAlarmPermission() },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.NotificationsOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "需要精确闹钟权限，点击前往设置",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
+                SimplePermissionCard(
+                    text = "需要精确闹钟权限，点击前往设置",
+                    onClick = onRequestAlarmPermission
+                )
             }
 
             if (!NotificationHelper.areNotificationsEnabled(context)) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenNotificationSettings() },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.NotificationsOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "需要通知权限，点击前往设置",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
+                SimplePermissionCard(
+                    text = "需要通知权限，点击前往设置",
+                    onClick = onOpenNotificationSettings
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 编辑设置按钮
             val editButtonInteractionSource = remember { MutableInteractionSource() }
             val editButtonPressed by editButtonInteractionSource.collectIsPressedAsState()
             val editButtonScale by animateFloatAsState(
@@ -447,7 +405,7 @@ fun MainScreen(
         }
     }
 
-    // Settings Dialog
+    // ===== 设置对话框 =====
     if (showSettings) {
         SettingsDialog(
             data = countdownData,
@@ -462,6 +420,8 @@ fun MainScreen(
                     }
                     onUpdateWidget()
                     snackbarHostState.showSnackbar("设置已保存")
+                    // 刷新权限状态
+                    refreshPermissions()
                 }
                 showSettings = false
                 if (newData.reminderEnabled) {
@@ -471,7 +431,7 @@ fun MainScreen(
         )
     }
 
-    // Widget prompt dialog
+    // ===== 小组件提示对话框 =====
     if (showWidgetPrompt) {
         AlertDialog(
             onDismissRequest = { showWidgetPrompt = false },
@@ -503,7 +463,7 @@ fun MainScreen(
         )
     }
 
-    // Update Dialog - only shown when a genuine update is available
+    // ===== 更新对话框 =====
     showUpdateDialog?.let { updateInfo ->
         AlertDialog(
             onDismissRequest = { showUpdateDialog = null },
@@ -542,6 +502,189 @@ fun MainScreen(
                 }
             }
         )
+    }
+}
+
+// ==================== 新增 UI 组件 ====================
+
+@Composable
+fun PermissionWarningCard(
+    onClick: () -> Unit,
+    missingCount: Int
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = Color(0xFFE65100),
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "权限缺失提醒",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE65100),
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = "有 $missingCount 项关键权限未开启，提醒功能可能无法正常工作，点击前往权限中心",
+                    color = Color(0xFFBF360C),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.Security,
+                contentDescription = null,
+                tint = Color(0xFFE65100)
+            )
+        }
+    }
+}
+
+@Composable
+fun HuaweiTipCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.NotificationsActive,
+                contentDescription = null,
+                tint = Color(0xFF1565C0),
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "华为设备优化",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1565C0),
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = "检测到华为设备，建议完成专项设置以确保提醒可靠触发",
+                    color = Color(0xFF0D47A1),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SimplePermissionCard(text: String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.NotificationsOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = text,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+fun MainCountdownCard(
+    eventContent: String,
+    daysRemaining: Long,
+    targetReached: Boolean,
+    targetDate: LocalDate
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp)
+            .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp))
+            .animateContentSize(animationSpec = tween(durationMillis = 300)),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    )
+                )
+                .padding(36.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = eventContent.ifEmpty { "未设置事件" },
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = if (targetReached) "到达" else if (daysRemaining == 0L) "今天" else "$daysRemaining",
+                modifier = Modifier.animateContentSize(animationSpec = tween(durationMillis = 300)),
+                style = MaterialTheme.typography.displayLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 120.sp,
+                lineHeight = 124.sp
+            )
+
+            Text(
+                text = if (targetReached) "" else if (daysRemaining <= 0) "天前" else "天",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "目标日期: ${DateCalculator.formatDate(targetDate)}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
+        }
     }
 }
 
@@ -618,7 +761,7 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Event content
+                // 事件内容
                 OutlinedTextField(
                     value = eventContent,
                     onValueChange = { eventContent = it },
@@ -631,7 +774,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Target date
+                // 目标日期
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -658,7 +801,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Reminder time
+                // 提醒时间
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -685,7 +828,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Reminder enabled
+                // 提醒启用
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -714,7 +857,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Theme mode
+                // 主题模式
                 var themeExpanded by remember { mutableStateOf(false) }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -795,7 +938,7 @@ fun SettingsDialog(
         }
     )
 
-    // Time Picker
+    // 时间选择器
     if (showTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = reminderHour,
@@ -823,7 +966,7 @@ fun SettingsDialog(
         )
     }
 
-    // Date Picker using Material 3 DatePickerDialog
+    // 日期选择器
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = targetDate
