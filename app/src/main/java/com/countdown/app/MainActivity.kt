@@ -10,8 +10,14 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,7 +79,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -243,34 +253,53 @@ fun MainScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
+        var contentVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { contentVisible = true }
+        val contentAlpha by animateFloatAsState(
+            targetValue = if (contentVisible) 1f else 0f,
+            animationSpec = tween(durationMillis = 600),
+            label = "contentAlpha"
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .alpha(contentAlpha),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Main countdown card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                shape = RoundedCornerShape(24.dp),
+                    .padding(vertical = 20.dp)
+                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp))
+                    .animateContentSize(animationSpec = tween(durationMillis = 300)),
+                shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = Color.Transparent
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        )
+                        .padding(36.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = countdownData.eventContent.ifEmpty { "未设置事件" },
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontWeight = FontWeight.Bold
                     )
@@ -279,11 +308,12 @@ fun MainScreen(
 
                     Text(
                         text = if (targetReached) "到达" else if (daysRemaining == 0L) "今天" else "$daysRemaining",
+                        modifier = Modifier.animateContentSize(animationSpec = tween(durationMillis = 300)),
                         style = MaterialTheme.typography.displayLarge,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 96.sp,
-                        lineHeight = 100.sp
+                        fontSize = 120.sp,
+                        lineHeight = 124.sp
                     )
 
                     Text(
@@ -383,11 +413,21 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val editButtonInteractionSource = remember { MutableInteractionSource() }
+            val editButtonPressed by editButtonInteractionSource.collectIsPressedAsState()
+            val editButtonScale by animateFloatAsState(
+                targetValue = if (editButtonPressed) 0.96f else 1f,
+                animationSpec = tween(durationMillis = 150),
+                label = "editButtonScale"
+            )
+
             Button(
                 onClick = { showSettings = true },
+                interactionSource = editButtonInteractionSource,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(56.dp)
+                    .scale(editButtonScale),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Edit, contentDescription = null)
@@ -496,32 +536,33 @@ fun InfoCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(28.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = valueColor,
                     fontWeight = FontWeight.SemiBold
                 )

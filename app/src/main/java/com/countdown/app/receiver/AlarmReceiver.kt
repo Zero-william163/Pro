@@ -3,17 +3,12 @@ package com.countdown.app.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.countdown.app.data.CountdownRepository
+import com.countdown.app.service.AlarmService
 import com.countdown.app.util.AlarmScheduler
 import com.countdown.app.util.DateCalculator
-import com.countdown.app.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,17 +38,16 @@ class AlarmReceiver : BroadcastReceiver() {
 
                 val daysRemaining = DateCalculator.daysRemaining(data.targetDate)
                 val targetReached = DateCalculator.isTargetReached(data.targetDate)
+                val eventContent = data.eventContent.ifEmpty { "目标" }
 
-                // Play sound and vibrate
-                playAlarmEffects(context)
-
-                // Show notification (with full-screen intent)
-                NotificationHelper.showReminderNotification(
-                    context,
-                    data.eventContent.ifEmpty { "目标" },
-                    daysRemaining,
-                    targetReached
-                )
+                // Start AlarmService to play sound, vibrate, and show full-screen notification
+                val alarmIntent = Intent(context, AlarmService::class.java).apply {
+                    action = AlarmService.ACTION_START_ALARM
+                    putExtra(AlarmService.EXTRA_EVENT_CONTENT, eventContent)
+                    putExtra(AlarmService.EXTRA_DAYS_REMAINING, daysRemaining)
+                    putExtra(AlarmService.EXTRA_TARGET_REACHED, targetReached)
+                }
+                ContextCompat.startForegroundService(context, alarmIntent)
 
                 // Reschedule for next day
                 AlarmScheduler.scheduleDailyAlarm(
@@ -65,50 +59,6 @@ class AlarmReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling alarm", e)
             }
-        }
-    }
-
-    private fun playAlarmEffects(context: Context) {
-        try {
-            // Vibrate
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                val vibrator = vibratorManager.defaultVibrator
-                vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), -1))
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), -1))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), -1)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Vibration failed", e)
-        }
-
-        try {
-            // Play notification sound
-            val notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone = RingtoneManager.getRingtone(context, notification)
-            ringtone?.let { rt ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    rt.audioAttributes = AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                }
-                rt.play()
-                // Stop after 3 seconds
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    try { rt.stop() } catch (_: Exception) {}
-                }, 3000)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Sound play failed", e)
         }
     }
 }

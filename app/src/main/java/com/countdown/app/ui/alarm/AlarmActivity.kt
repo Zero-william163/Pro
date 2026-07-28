@@ -2,16 +2,21 @@ package com.countdown.app.ui.alarm
 
 import android.app.KeyguardManager
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.RingtoneManager
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,20 +28,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.countdown.app.R
+import com.countdown.app.service.AlarmService
 import com.countdown.app.ui.theme.CountdownTheme
 import com.countdown.app.util.DateCalculator
+import kotlinx.coroutines.delay
 
 class AlarmActivity : ComponentActivity() {
 
@@ -45,8 +57,6 @@ class AlarmActivity : ComponentActivity() {
         const val EXTRA_DAYS_REMAINING = "days_remaining"
         const val EXTRA_TARGET_REACHED = "target_reached"
     }
-
-    private var ringtone: android.media.Ringtone? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,19 +69,18 @@ class AlarmActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
 
+        // Keep screen on for all API levels
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Dismiss keyguard so the full-screen alarm is visible
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             keyguardManager.requestDismissKeyguard(this, null)
         }
-
-        // Play alarm sound
-        playAlarmSound()
-        vibrate()
 
         val eventContent = intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: ""
         val daysRemaining = intent.getLongExtra(EXTRA_DAYS_REMAINING, 0)
@@ -84,52 +93,27 @@ class AlarmActivity : ComponentActivity() {
                         eventContent = eventContent,
                         daysRemaining = daysRemaining,
                         targetReached = targetReached,
-                        onDismiss = { finishAndRemoveTask() }
+                        onDismiss = { dismissAlarm() }
                     )
                 }
             }
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        try { ringtone?.stop() } catch (_: Exception) {}
+    /**
+     * Stop the AlarmService (sound + vibration) and remove the activity from the task stack.
+     * Note: onDestroy intentionally does NOT stop the service, so that swiping the activity
+     * away from recents does not prematurely stop the alarm sound.
+     */
+    private fun dismissAlarm() {
+        val stopIntent = Intent(this, AlarmService::class.java).apply {
+            action = AlarmService.ACTION_STOP_ALARM
+        }
+        startService(stopIntent)
+        finishAndRemoveTask()
     }
 
-    private fun playAlarmSound() {
-        try {
-            val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            ringtone = RingtoneManager.getRingtone(this, notificationUri)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                ringtone?.audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            }
-            ringtone?.play()
-        } catch (_: Exception) {}
-    }
-
-    private fun vibrate() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vibratorManager.defaultVibrator.vibrate(
-                    VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), -1)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), -1))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), -1)
-                }
-            }
-        } catch (_: Exception) {}
-    }
+    // onDestroy intentionally does NOT stop AlarmService to prevent accidental alarm cutoff.
 }
 
 @Composable
@@ -139,54 +123,174 @@ fun AlarmScreen(
     targetReached: Boolean,
     onDismiss: () -> Unit
 ) {
-    val displayText = when {
-        targetReached -> "【$eventContent】\n目标日期已到达！"
-        daysRemaining == 0L -> "【$eventContent】\n就是今天！"
-        daysRemaining < 0 -> "【$eventContent】\n已过去 ${-daysRemaining} 天"
-        else -> "离【$eventContent】\n还有 ${daysRemaining} 天"
+    // Live-updating current time
+    var currentTime by remember { mutableStateOf(DateCalculator.formatCurrentDateTime()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            currentTime = DateCalculator.formatCurrentDateTime()
+        }
     }
+
+    // Entrance animation state
+    var contentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        contentVisible = true
+    }
+
+    // Pulse animation for the countdown number
+    val infiniteTransition = rememberInfiniteTransition(label = "alarmPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    // Determine the big number and label to display
+    val bigNumber: String
+    val unitLabel: String
+    val statusText: String
+    when {
+        targetReached -> {
+            bigNumber = ""
+            unitLabel = ""
+            statusText = "目标日期已到达！"
+        }
+        daysRemaining == 0L -> {
+            bigNumber = "0"
+            unitLabel = "天"
+            statusText = "就是今天！"
+        }
+        daysRemaining < 0 -> {
+            bigNumber = (-daysRemaining).toString()
+            unitLabel = "天前"
+            statusText = "已过去"
+        }
+        else -> {
+            bigNumber = daysRemaining.toString()
+            unitLabel = "天"
+            statusText = "还有"
+        }
+    }
+
+    val gradientColors = listOf(
+        Color(0xFF1A1A2E),
+        Color(0xFF16213E),
+        Color(0xFF0F0F1E)
+    )
+    val accentColor = Color(0xFFFF6B6B)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
+            .background(Brush.verticalGradient(gradientColors))
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
+        // Top: current time
         Text(
-            text = DateCalculator.formatCurrentDateTime(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            text = currentTime,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        // Middle: event content + countdown number (with pulse animation)
+        AnimatedVisibility(
+            visible = contentVisible,
+            enter = fadeIn(animationSpec = tween(500)) +
+                slideInVertically(
+                    animationSpec = tween(500),
+                    initialOffsetY = { it / 4 }
+                )
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Event content
+                Text(
+                    text = "【$eventContent】",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 36.sp
+                )
 
-        Text(
-            text = displayText,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.primary,
-            lineHeight = 40.sp
-        )
+                Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(48.dp))
+                if (targetReached) {
+                    // Target reached: show status text with pulse
+                    Text(
+                        text = statusText,
+                        fontSize = 56.sp,
+                        fontWeight = FontWeight.Black,
+                        color = accentColor.copy(alpha = pulseAlpha),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.scale(pulseScale)
+                    )
+                } else {
+                    // Countdown: show status text + big number with pulse
+                    Text(
+                        text = statusText,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
 
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Super large countdown number with pulse
+                    Text(
+                        text = bigNumber,
+                        fontSize = 120.sp,
+                        fontWeight = FontWeight.Black,
+                        color = accentColor.copy(alpha = pulseAlpha),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 120.sp,
+                        modifier = Modifier.scale(pulseScale)
+                    )
+
+                    Text(
+                        text = unitLabel,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        // Bottom: dismiss button
         Button(
             onClick = onDismiss,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
+                .height(64.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                containerColor = accentColor,
+                contentColor = Color.White
             )
         ) {
             Text(
                 text = "关闭提醒",
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }

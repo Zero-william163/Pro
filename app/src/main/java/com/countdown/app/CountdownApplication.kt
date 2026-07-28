@@ -38,6 +38,9 @@ class CountdownApplication : Application() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = getString(R.string.notification_channel_description)
+                // AlarmService plays its own sound via MediaPlayer, so the channel
+                // should not have a default sound to avoid double audio.
+                setSound(null, null)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500)
                 setShowBadge(true)

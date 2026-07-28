@@ -65,16 +65,23 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
                     else -> "天"
                 }
                 val targetText = "目标: ${DateCalculator.formatDate(data.targetDate)}"
+                val reminderText = if (data.reminderEnabled) {
+                    "提醒 ${DateCalculator.formatTime(data.reminderTimeHour, data.reminderTimeMinute)}"
+                } else {
+                    "未设置提醒"
+                }
 
                 views.setTextViewText(R.id.widget_event, eventText)
                 views.setTextViewText(R.id.widget_days, daysText)
                 views.setTextViewText(R.id.widget_label, labelText)
                 views.setTextViewText(R.id.widget_target, targetText)
+                views.setTextViewText(R.id.widget_reminder_time, reminderText)
             } else {
                 views.setTextViewText(R.id.widget_event, "目标倒计时")
                 views.setTextViewText(R.id.widget_days, "--")
                 views.setTextViewText(R.id.widget_label, "天")
                 views.setTextViewText(R.id.widget_target, "请打开应用设置")
+                views.setTextViewText(R.id.widget_reminder_time, "未设置提醒")
             }
 
             // Click to open app
