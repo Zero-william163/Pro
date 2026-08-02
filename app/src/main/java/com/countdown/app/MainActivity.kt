@@ -39,13 +39,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -100,14 +101,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.countdown.app.data.CountdownData
 import com.countdown.app.data.CountdownRepository
-import com.countdown.app.service.DownloadService
 import com.countdown.app.ui.components.AnimatedEntrance
 import com.countdown.app.ui.components.CountdownHeroCard
 import com.countdown.app.ui.components.InfoCardItem
 import com.countdown.app.ui.permission.PermissionActivity
 import com.countdown.app.ui.ringtone.RingtoneSettingsActivity
 import com.countdown.app.ui.theme.CountdownTheme
-import com.countdown.app.update.UpdateChecker
 import com.countdown.app.util.AlarmScheduler
 import com.countdown.app.util.DateCalculator
 import com.countdown.app.util.NotificationHelper
@@ -168,19 +167,6 @@ class MainActivity : ComponentActivity() {
                         onOpenRingtoneSettings = {
                             RingtoneSettingsActivity.start(this)
                         },
-                        onCheckUpdate = { onUpdateCheckResult ->
-                            lifecycleScope.launch {
-                                val result = UpdateChecker.checkUpdate(this@MainActivity)
-                                onUpdateCheckResult(result)
-                            }
-                        },
-                        onStartDownload = { url, versionName ->
-                            val intent = Intent(this, DownloadService::class.java).apply {
-                                putExtra(DownloadService.EXTRA_DOWNLOAD_URL, url)
-                                putExtra(DownloadService.EXTRA_VERSION_NAME, versionName)
-                            }
-                            ContextCompat.startForegroundService(this, intent)
-                        },
                         onUpdateWidget = {
                             CountdownWidgetReceiver.updateAllWidgets(this@MainActivity)
                         }
@@ -205,8 +191,6 @@ fun MainScreen(
     onOpenNotificationSettings: () -> Unit,
     onOpenPermissionCenter: () -> Unit,
     onOpenRingtoneSettings: () -> Unit,
-    onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
-    onStartDownload: (String, String) -> Unit,
     onUpdateWidget: () -> Unit
 ) {
     val context = LocalContext.current
@@ -249,8 +233,6 @@ fun MainScreen(
     }
 
     var showSettings by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
     var showWidgetPrompt by remember { mutableStateOf(false) }
 
     // ===== 启动时检测桌面小组件（真实检测，不使用 SharedPreferences） =====
@@ -289,39 +271,6 @@ fun MainScreen(
                     }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
-                    }
-                    IconButton(onClick = {
-                        isCheckingUpdate = true
-                        onCheckUpdate { result ->
-                            isCheckingUpdate = false
-                            result.onSuccess { updateResult ->
-                                when (updateResult) {
-                                    is UpdateChecker.UpdateResult.UpdateAvailable -> {
-                                        showUpdateDialog = updateResult
-                                    }
-                                    is UpdateChecker.UpdateResult.UpToDate -> {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("当前已是最新版本")
-                                        }
-                                    }
-                                    is UpdateChecker.UpdateResult.LocalNewer -> {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("当前版本高于最新正式版")
-                                        }
-                                    }
-                                }
-                            }.onFailure { e ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("检查更新失败，请稍后重试")
-                                }
-                            }
-                        }
-                    }) {
-                        if (isCheckingUpdate) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.SystemUpdate, contentDescription = "检查更新")
-                        }
                     }
                 }
             )
@@ -521,46 +470,6 @@ fun MainScreen(
         )
     }
 
-    // ===== 更新对话框 =====
-    showUpdateDialog?.let { updateInfo ->
-        AlertDialog(
-            onDismissRequest = { showUpdateDialog = null },
-            title = { Text("发现新版本 v${updateInfo.remoteVersion.tagName}") },
-            text = {
-                Column {
-                    Text(
-                        "当前版本: ${updateInfo.installedVersion.versionName}\n" +
-                        "新版本: ${updateInfo.remoteVersion.tagName}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (updateInfo.remoteVersion.releaseNotes.isNotBlank()) {
-                        Text(
-                            updateInfo.remoteVersion.releaseNotes,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onStartDownload(
-                        updateInfo.remoteVersion.downloadUrl,
-                        updateInfo.remoteVersion.tagName
-                    )
-                    showUpdateDialog = null
-                    scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
-                }) {
-                    Text("下载更新")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUpdateDialog = null }) {
-                    Text("稍后")
-                }
-            }
-        )
-    }
 }
 
 // ==================== 新增 UI 组件 ====================
@@ -765,7 +674,8 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // 事件内容
+                // ===== 事件内容 =====
+                SettingsSectionTitle("事件")
                 OutlinedTextField(
                     value = eventContent,
                     onValueChange = { eventContent = it },
@@ -776,75 +686,46 @@ fun SettingsDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ===== 日期与提醒分组 =====
+                SettingsSectionTitle("日期与提醒")
 
                 // 目标日期
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = null)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("目标日期", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                DateCalculator.formatDate(targetDate),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
+                SettingsRowCard(
+                    icon = Icons.Default.CalendarToday,
+                    iconBgColor = Color(0xFF6366F1),
+                    title = "目标日期",
+                    subtitle = DateCalculator.formatDate(targetDate),
+                    onClick = { showDatePicker = true }
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // 提醒时间
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showTimePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.AccessTime, contentDescription = null)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("每日提醒时间", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                DateCalculator.formatTime(reminderHour, reminderMinute),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
+                SettingsRowCard(
+                    icon = Icons.Default.AccessTime,
+                    iconBgColor = Color(0xFF0EA5E9),
+                    title = "每日提醒时间",
+                    subtitle = DateCalculator.formatTime(reminderHour, reminderMinute),
+                    onClick = { showTimePicker = true }
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // 提醒启用
+                // 启用每日提醒
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            if (reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                            contentDescription = null
+                        SettingsIcon(
+                            icon = if (reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            bgColor = if (reminderEnabled) Color(0xFFEC4899) else Color(0xFF94A3B8)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
@@ -859,28 +740,31 @@ fun SettingsDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ===== 外观分组 =====
+                SettingsSectionTitle("外观")
 
                 // 主题模式
                 var themeExpanded by remember { mutableStateOf(false) }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
                         modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
                             .clickable { themeExpanded = true },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            when (themeMode) {
+                        SettingsIcon(
+                            icon = when (themeMode) {
                                 CountdownData.THEME_DARK -> Icons.Default.DarkMode
                                 CountdownData.THEME_LIGHT -> Icons.Default.LightMode
                                 else -> Icons.Default.Settings
                             },
-                            contentDescription = null
+                            bgColor = Color(0xFF8B5CF6)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -914,6 +798,27 @@ fun SettingsDialog(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ===== 关于分组 =====
+                SettingsSectionTitle("关于")
+
+                SettingsRowCard(
+                    icon = Icons.Default.Info,
+                    iconBgColor = Color(0xFF3B82F6),
+                    title = "应用名称",
+                    subtitle = "目标倒计时"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingsRowCard(
+                    icon = Icons.Default.Tag,
+                    iconBgColor = Color(0xFF10B981),
+                    title = "当前版本",
+                    subtitle = "1.6.4"
+                )
             }
         },
         confirmButton = {
@@ -1000,6 +905,81 @@ fun SettingsDialog(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+// ==================== 设置页面辅助组件 ====================
+
+/** 分组标题 */
+@Composable
+fun SettingsSectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+    )
+}
+
+/** 彩色圆形图标 */
+@Composable
+fun SettingsIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    bgColor: Color,
+    size: Int = 36
+) {
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .clip(RoundedCornerShape((size / 2).dp))
+            .background(bgColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size((size * 0.55).dp)
+        )
+    }
+}
+
+/** 带彩色圆形图标的设置行卡片 */
+@Composable
+fun SettingsRowCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconBgColor: Color,
+    title: String,
+    subtitle: String,
+    onClick: (() -> Unit)? = null
+) {
+    val mod = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    } else {
+        Modifier.fillMaxWidth()
+    }
+    Card(
+        modifier = mod,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingsIcon(icon = icon, bgColor = iconBgColor)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(title, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
