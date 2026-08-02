@@ -18,3 +18,7 @@ local.properties
 app/build/
 *.apk
 *.aab
+
+# 签名密钥（不提交）
+*.jks
+*.keystore
