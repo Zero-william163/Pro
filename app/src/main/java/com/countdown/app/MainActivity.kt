@@ -817,7 +817,7 @@ fun SettingsDialog(
                     icon = Icons.Default.Tag,
                     iconBgColor = Color(0xFF10B981),
                     title = "当前版本",
-                    subtitle = "1.6.4"
+                    subtitle = "1.6.5"
                 )
             }
         },
