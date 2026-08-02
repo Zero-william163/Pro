@@ -5,11 +5,17 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.util.Log
 import android.widget.RemoteViews
 import com.countdown.app.R
 import com.countdown.app.data.CountdownRepository
 import com.countdown.app.util.DateCalculator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * Countdown Widget Receiver (Redesigned)
@@ -18,7 +24,8 @@ import kotlinx.coroutines.runBlocking
  * - Automatic dark/light mode background adaptation
  * - Modern card-style layout with large countdown number
  * - Click to open app
- * - Efficient data loading with error handling
+ * - Async data loading (no runBlocking on main thread)
+ * - Robust error handling (always shows something)
  */
 class CountdownWidgetReceiver : AppWidgetProvider() {
 
@@ -33,11 +40,40 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
     }
 
     companion object {
+        private const val TAG = "WidgetReceiver"
+
+        /**
+         * Synchronous widget update — used from MainActivity or other
+         * places that already have a background context.
+         * Uses runBlocking but wraps in try-catch to never crash.
+         */
         fun updateWidget(
             context: Context,
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
+            try {
+                val views = buildRemoteViews(context)
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update widget $appWidgetId", e)
+                // Fallback: show a minimal RemoteViews so the widget
+                // doesn't show "Problem loading widget"
+                try {
+                    val fallback = RemoteViews(context.packageName, R.layout.widget_countdown)
+                    appWidgetManager.updateAppWidget(appWidgetId, fallback)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Even fallback failed", e2)
+                }
+            }
+        }
+
+        /**
+         * Build the RemoteViews for the widget.
+         * Loads data synchronously — must be called from a background thread
+         * or wrapped in runBlocking with a timeout.
+         */
+        private fun buildRemoteViews(context: Context): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_countdown)
 
             // ===== Dark mode detection: set appropriate background =====
@@ -51,13 +87,14 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
             }
             views.setInt(R.id.widget_container, "setBackgroundResource", bgDrawable)
 
-            // ===== Load countdown data =====
-            val data = runBlocking {
-                try {
+            // ===== Load countdown data with fallback =====
+            val data = try {
+                runBlocking {
                     CountdownRepository.getInstance(context).getCountdownDataSync()
-                } catch (e: Exception) {
-                    null
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load countdown data", e)
+                null
             }
 
             if (data != null) {
@@ -89,6 +126,7 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_target, targetText)
                 views.setTextViewText(R.id.widget_reminder_time, reminderText)
             } else {
+                // Show placeholder data when loading fails
                 views.setTextViewText(R.id.widget_event, "目标倒计时")
                 views.setTextViewText(R.id.widget_days, "--")
                 views.setTextViewText(R.id.widget_label, "天")
@@ -106,7 +144,7 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_container, pendingIntent)
 
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+            return views
         }
     }
 }

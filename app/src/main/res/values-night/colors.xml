@@ -4,8 +4,18 @@
     <color name="widget_gradient_start">#FF312E81</color>
     <color name="widget_gradient_end">#FF0C4A6E</color>
 
-    <!-- Dark mode widget text (still white on dark gradient) -->
+    <!-- Dark mode widget text (white on dark gradient) -->
     <color name="widget_text_primary">#FFFFFFFF</color>
     <color name="widget_text_secondary">#B3FFFFFF</color>
     <color name="widget_text_tertiary">#80FFFFFF</color>
+
+    <!-- Dark mode status colors -->
+    <color name="status_green_bg">#FF052E16</color>
+    <color name="status_orange_bg">#FF431407</color>
+    <color name="status_red_bg">#FF450A0A</color>
+    <color name="status_blue_bg">#FF172554</color>
+
+    <!-- Dark mode surface colors -->
+    <color name="surface_light">#FF1A1A22</color>
+    <color name="background_light">#FF0F0F14</color>
 </resources>

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Countdown Widget - Dark Background (explicit dark version)
+    Countdown Widget - Background (Dark Mode auto-adapt)
 
-    Used programmatically by the widget receiver for dark mode.
-    The drawable-night/widget_background.xml handles automatic adaptation.
+    When the system is in dark mode, this file is automatically used
+    instead of drawable/widget_background.xml, ensuring the widget
+    always has the correct background even if the receiver fails to run.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
