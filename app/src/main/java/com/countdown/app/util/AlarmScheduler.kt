@@ -20,9 +20,7 @@ import com.countdown.app.receiver.AlarmReceiver
  */
 object AlarmScheduler {
 
-    const val CHANNEL_ID_ALARM = "countdown_alarm_channel"
-    const val CHANNEL_ID_REMINDER = "countdown_reminder_channel"
-
+    // 渠道 ID 统一在 NotificationHelper 中定义，此处不再重复
     private const val REQUEST_CODE_DAILY = 1001
     private const val REQUEST_CODE_ONESHOT = 1002
     private const val TAG = "AlarmScheduler"
@@ -88,9 +86,9 @@ object AlarmScheduler {
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = AlarmReceiver.ACTION_DAILY_REMINDER
-            putExtra("event_content", eventContent)
-            putExtra("days_remaining", daysRemaining)
-            putExtra("target_reached", targetReached)
+            putExtra(AlarmReceiver.EXTRA_EVENT_CONTENT, eventContent)
+            putExtra(AlarmReceiver.EXTRA_DAYS_REMAINING, daysRemaining)
+            putExtra(AlarmReceiver.EXTRA_TARGET_REACHED, targetReached)
         }
 
         val pendingIntent = PendingIntent.getBroadcast(

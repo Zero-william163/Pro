@@ -337,8 +337,25 @@ fun PermissionCard(
         visible = visible,
         enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 }
     ) {
-        val statusColor = if (item.isGranted) Color(0xFF4CAF50) else Color(0xFFFF9800)
-        val statusBgColor = if (item.isGranted) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+        // 状态颜色：
+        // 绿色 = 已开启
+        // 红色 = 未开启 + 关键权限
+        // 橙色 = 未开启 + 非关键权限（建议开启）
+        val statusColor = when {
+            item.isGranted -> Color(0xFF4CAF50)
+            item.isCritical -> Color(0xFFEF4444)
+            else -> Color(0xFFFF9800)
+        }
+        val statusBgColor = when {
+            item.isGranted -> Color(0xFFE8F5E9)
+            item.isCritical -> Color(0xFFFFEBEE)
+            else -> Color(0xFFFFF3E0)
+        }
+        val statusText = when {
+            item.isGranted -> "已开启"
+            item.isCritical -> "未开启"
+            else -> "建议开启"
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -405,10 +422,60 @@ fun PermissionCard(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (item.isGranted) "已开启" else "未开启",
+                            text = statusText,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = statusColor
+                        )
+                    }
+                }
+
+                // 开启后的作用说明
+                if (item.benefit.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF4CAF50).copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = item.benefit,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+
+                // 操作引导说明（华为等厂商特定设置说明）
+                if (item.actionGuide != null && !item.isGranted) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFFFF8E1))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFFF8F00),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = item.actionGuide,
+                            fontSize = 12.sp,
+                            color = Color(0xFF5D4037),
+                            lineHeight = 17.sp
                         )
                     }
                 }
@@ -421,8 +488,8 @@ fun PermissionCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
+                            containerColor = if (item.isCritical) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary,
+                            contentColor = Color.White
                         )
                     ) {
                         Text(

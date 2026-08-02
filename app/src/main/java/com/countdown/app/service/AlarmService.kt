@@ -2,7 +2,6 @@ package com.countdown.app.service
 
 import android.app.Notification
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -21,27 +20,38 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.countdown.app.R
-import com.countdown.app.ui.alarm.AlarmActivity
 import com.countdown.app.util.NotificationHelper
 
 /**
- * 闹钟前台服务（已重构）
+ * 闹钟前台服务（重构 v3）
  *
- * 职责：
- * 1. 播放闹钟声音（循环 + 音频焦点）
- * 2. 触发震动（循环波形）
- * 3. 保持 WakeLock 防止设备休眠
- * 4. 显示前台通知（带全屏意图和操作按钮）
- * 5. 可靠的关闭逻辑（停止声音、震动、释放资源）
- * 6. 降级方案（当 FullScreenIntent 不可用时）
+ * 核心设计原则（遵循 Android 官方最佳实践）：
+ *
+ * 1. 【单一通知原则】前台服务通知 = 唯一的闹钟通知，不再创建第二个通知
+ *    - 之前创建两个通知（前台通知 + showAlarmNotification），两个都有 FullScreenIntent
+ *    - 系统遇到多个 FullScreenIntent 时会冲突，导致全屏界面无法弹出
+ *
+ * 2. 【FullScreenIntent 自行处理】不手动 startActivity 启动 AlarmActivity
+ *    - Android 官方文档：setFullScreenIntent() 在锁屏时会自动启动全屏 Activity
+ *    - 手动 startActivity 会与 FullScreenIntent 冲突，导致行为不确定
+ *    - 非锁屏时，FullScreenIntent 降级为 Heads-up Notification（正确行为）
+ *
+ * 3. 【声音/震动由 Service 直接控制】通知渠道不设声音和震动
+ *    - 避免 MediaPlayer 声音 + 渠道声音 = 双重声音
+ *    - MediaPlayer 使用 USAGE_ALARM 属性，系统级闹钟体验
+ *
+ * 4. 【可靠资源清理】关闭时释放所有资源
+ *    - MediaPlayer.release()
+ *    - Vibrator.cancel()
+ *    - WakeLock.release()
+ *    - AudioFocus.abandon()
+ *    - Notification.cancel()
+ *    - stopForeground() + stopSelf()
  */
 class AlarmService : Service() {
 
     companion object {
         private const val TAG = "AlarmService"
-        private const val NOTIFICATION_ID = 2001
 
         const val ACTION_START_ALARM = "com.countdown.app.action.START_ALARM"
         const val ACTION_STOP_ALARM = "com.countdown.app.action.STOP_ALARM"
@@ -90,26 +100,30 @@ class AlarmService : Service() {
 
                 Log.d(TAG, "Starting alarm: event=$eventContent, days=$daysRemaining, reached=$targetReached")
 
-                // 构建前台通知
-                val notification = buildForegroundNotification(eventContent, daysRemaining, targetReached)
-                startForegroundCompat(notification)
-
-                // 显示全屏通知（系统级闹钟体验）
-                NotificationHelper.showAlarmNotification(
+                // 【关键】使用 NotificationHelper 构建唯一的通知
+                // 此通知同时用作：
+                // - 前台服务通知（startForeground）
+                // - FullScreenIntent 载体（锁屏时自动弹出全屏界面）
+                // - 通知操作按钮（关闭/稍后提醒）
+                val notification = NotificationHelper.buildAlarmNotification(
                     this,
                     eventContent,
                     daysRemaining,
                     targetReached
                 )
+                startForegroundCompat(notification)
 
-                // 播放声音
+                // 播放声音（MediaPlayer + 音频焦点）
                 startSoundWithAudioFocus()
 
                 // 开始震动
                 startVibration()
 
-                // 如果是降级方案（无法全屏），尝试直接启动 AlarmActivity
-                tryStartFullScreenActivity(eventContent, daysRemaining, targetReached)
+                // 【关键】不手动启动 AlarmActivity！
+                // FullScreenIntent 会自动处理：
+                // - 锁屏时：直接启动全屏 AlarmActivity
+                // - 非锁屏时：显示 Heads-up Notification（横幅通知）
+                // 手动 startActivity 会与 FullScreenIntent 冲突，导致系统不确定行为
             }
         }
         return START_STICKY
@@ -120,20 +134,24 @@ class AlarmService : Service() {
     private fun startForegroundCompat(notification: Notification) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Android 14+ 必须指定前台服务类型
                 startForeground(
-                    NOTIFICATION_ID,
+                    NotificationHelper.ALARM_NOTIFICATION_ID,
                     notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
             } else {
-                startForeground(NOTIFICATION_ID, notification)
+                startForeground(NotificationHelper.ALARM_NOTIFICATION_ID, notification)
             }
+            Log.d(TAG, "Foreground service started with unified alarm notification")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start foreground", e)
+            Log.e(TAG, "Failed to start foreground service", e)
             // 降级：如果前台服务失败，至少尝试显示通知
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
                 val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                nm.notify(NOTIFICATION_ID, notification)
+                nm.notify(NotificationHelper.ALARM_NOTIFICATION_ID, notification)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Even notification fallback failed", e2)
             }
         }
     }
@@ -290,7 +308,7 @@ class AlarmService : Service() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == ACTION_CLOSE_ALARM_ACTIVITY) {
                     Log.d(TAG, "Received CLOSE_ALARM_ACTIVITY broadcast")
-                    // 什么都不需要做，AlarmActivity 会自己处理关闭
+                    // AlarmActivity 会自行处理关闭，这里不需要做额外操作
                 }
             }
         }
@@ -303,76 +321,10 @@ class AlarmService : Service() {
         }
     }
 
-    // ==================== 降级方案：直接启动 Activity ====================
-
-    private fun tryStartFullScreenActivity(
-        eventContent: String,
-        daysRemaining: Long,
-        targetReached: Boolean
-    ) {
-        // 如果设备不支持 FullScreenIntent 或者权限不足，尝试直接启动 AlarmActivity
-        try {
-            val activityIntent = Intent(this, AlarmActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                putExtra(AlarmActivity.EXTRA_EVENT_CONTENT, eventContent)
-                putExtra(AlarmActivity.EXTRA_DAYS_REMAINING, daysRemaining)
-                putExtra(AlarmActivity.EXTRA_TARGET_REACHED, targetReached)
-            }
-            startActivity(activityIntent)
-            Log.d(TAG, "Started AlarmActivity directly as fallback")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not start AlarmActivity directly", e)
-        }
-    }
-
-    // ==================== 前台通知构建 ====================
-
-    private fun buildForegroundNotification(
-        eventContent: String,
-        daysRemaining: Long,
-        targetReached: Boolean
-    ): Notification {
-        val contentText = when {
-            targetReached -> "【$eventContent】目标日期已到达！"
-            daysRemaining == 0L -> "【$eventContent】就是今天！"
-            daysRemaining < 0 -> "【$eventContent】已过去 ${-daysRemaining} 天"
-            else -> "离【$eventContent】还有 $daysRemaining 天"
-        }
-
-        // 点击打开全屏界面
-        val fullScreenIntent = Intent(this, AlarmActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(AlarmActivity.EXTRA_EVENT_CONTENT, eventContent)
-            putExtra(AlarmActivity.EXTRA_DAYS_REMAINING, daysRemaining)
-            putExtra(AlarmActivity.EXTRA_TARGET_REACHED, targetReached)
-        }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            this,
-            10,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ID_ALARM)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(getString(R.string.alarm_service_title))
-            .setContentText(contentText)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setOngoing(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setSound(null)
-            .setVibrate(null)
-            .build()
-    }
-
-    // ==================== 停止闹钟并清理资源 ====================
+    // ==================== 停止闹钟并清理所有资源 ====================
 
     private fun stopAlarmAndCleanup() {
-        Log.d(TAG, "Stopping alarm and cleaning up resources")
+        Log.d(TAG, "Stopping alarm and cleaning up all resources")
 
         // 1. 停止并释放 MediaPlayer
         try {
@@ -421,7 +373,7 @@ class AlarmService : Service() {
         }
         wakeLock = null
 
-        // 5. 取消通知
+        // 5. 取消通知（使用统一 ID）
         NotificationHelper.cancelAlarmNotification(this)
 
         // 6. 停止前台服务

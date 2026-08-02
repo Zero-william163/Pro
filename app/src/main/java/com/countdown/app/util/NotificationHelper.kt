@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -21,13 +20,17 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 通知帮助类（已重构）
- * 支持：
- * - 真正的 FullScreenIntent 通知
- * - 多通知渠道（闹钟渠道 + 普通提醒渠道）
- * - 通知操作按钮（关闭 / 稍后提醒）
- * - 高优先级 + 横幅 (Heads-up)
- * - 降级方案
+ * 通知帮助类（重构 v2）
+ *
+ * 核心设计原则：
+ * 1. 闹钟前台服务通知 = 唯一的闹钟通知（不再创建第二个通知）
+ * 2. 闹钟渠道不设声音/震动（由 AlarmService 通过 MediaPlayer/Vibrator 直接控制）
+ * 3. FullScreenIntent 只出现在唯一的通知上
+ * 4. 通知操作按钮（关闭/稍后提醒）直接在通知上
+ *
+ * 之前的 bug：
+ * - 创建了两个通知（前台通知 + showAlarmNotification），两个都有 FullScreenIntent，导致系统不触发
+ * - 渠道有声音 + MediaPlayer 也有声音 = 双重声音
  */
 object NotificationHelper {
 
@@ -36,8 +39,13 @@ object NotificationHelper {
     const val CHANNEL_ID_REMINDER = "countdown_reminder_channel"
     const val CHANNEL_ID_SNOOZE = "countdown_snooze_channel"
 
-    // ==================== 通知 ID ====================
-    private const val NOTIFICATION_ID_ALARM = 3001
+    // ==================== 统一通知 ID ====================
+    /**
+     * 闹钟通知的唯一 ID。
+     * AlarmService 前台通知和取消操作都使用此 ID。
+     */
+    const val ALARM_NOTIFICATION_ID = 2001
+
     private const val NOTIFICATION_ID_REMINDER = 3002
     private const val NOTIFICATION_ID_SNOOZE = 3003
 
@@ -48,23 +56,21 @@ object NotificationHelper {
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 1. 闹钟渠道 - 最高优先级，带声音和震动
+        // 1. 闹钟渠道 - IMPORTANCE_HIGH（用于触发 Heads-up 和 FullScreenIntent）
+        //    【关键】不设声音和震动，由 AlarmService 通过 MediaPlayer/Vibrator 直接控制
+        //    这样避免渠道声音 + MediaPlayer 声音的双重播放
         val alarmChannel = NotificationChannel(
             CHANNEL_ID_ALARM,
             context.getString(R.string.channel_name_alarm),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = context.getString(R.string.channel_desc_alarm)
-            setSound(
-                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM),
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 500, 300, 500, 300, 500)
+            // 不设声音 - 由 Service 的 MediaPlayer 播放
+            // 不设震动 - 由 Service 的 Vibrator 控制
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true) // 闹钟绕过勿扰模式
+            enableLights(true) // 闪烁呼吸灯
+            lightColor = 0xFFFF5252.toInt()
         }
 
         // 2. 普通提醒渠道 - 默认优先级
@@ -76,7 +82,7 @@ object NotificationHelper {
             description = context.getString(R.string.channel_desc_reminder)
         }
 
-        // 3. 稍后提醒渠道 - 低优先级，仅提示
+        // 3. 稍后提醒渠道 - 低优先级
         val snoozeChannel = NotificationChannel(
             CHANNEL_ID_SNOOZE,
             context.getString(R.string.channel_name_snooze),
@@ -88,28 +94,32 @@ object NotificationHelper {
         notificationManager.createNotificationChannels(listOf(alarmChannel, reminderChannel, snoozeChannel))
     }
 
-    // ==================== 核心闹钟通知（带 FullScreenIntent） ====================
+    // ==================== 构建闹钟通知（供 AlarmService 前台服务使用） ====================
 
-    fun showAlarmNotification(
+    /**
+     * 构建唯一的闹钟通知。
+     *
+     * 此通知同时用作：
+     * - 前台服务通知（startForeground）
+     * - FullScreenIntent 载体
+     * - 通知操作按钮（关闭/稍后提醒）
+     *
+     * 声音和震动由 AlarmService 直接控制，不通过渠道。
+     */
+    fun buildAlarmNotification(
         context: Context,
         eventContent: String,
         daysRemaining: Long,
         targetReached: Boolean
-    ) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    ): Notification {
+        val contentText = buildContentText(eventContent, daysRemaining, targetReached)
 
-        val contentText = when {
-            targetReached -> "【$eventContent】目标日期已到达！"
-            daysRemaining == 0L -> "【$eventContent】就是今天！"
-            daysRemaining < 0 -> "【$eventContent】已过去 ${-daysRemaining} 天"
-            else -> "离【$eventContent】还有 ${daysRemaining} 天"
-        }
-
-        // --- PendingIntent: 点击通知打开全屏闹钟界面 ---
+        // --- FullScreenIntent: 锁屏时直接弹出全屏闹钟界面 ---
         val fullScreenIntent = Intent(context, AlarmActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(AlarmActivity.EXTRA_EVENT_CONTENT, eventContent)
             putExtra(AlarmActivity.EXTRA_DAYS_REMAINING, daysRemaining)
             putExtra(AlarmActivity.EXTRA_TARGET_REACHED, targetReached)
@@ -121,7 +131,7 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // --- PendingIntent: 点击通知内容打开主应用 ---
+        // --- ContentIntent: 点击通知内容打开主应用 ---
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -165,12 +175,15 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            // FullScreenIntent：这是实现系统级闹钟体验的核心
+            // 【核心】FullScreenIntent - 锁屏时直接弹出全屏界面
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setContentIntent(openAppPendingIntent)
             .setAutoCancel(false)
             .setOngoing(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // 声音和震动不通过通知控制（由 Service 的 MediaPlayer/Vibrator 处理）
+            .setSound(null)
+            .setVibrate(longArrayOf(0L))
             // 操作按钮
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
@@ -183,12 +196,12 @@ object NotificationHelper {
                 snoozePendingIntent
             )
 
-        // 对于 Android 8 以下，设置默认声音和震动
+        // Android 8 以下设置默认声音和震动（不会有渠道覆盖）
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            builder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
+            builder.setDefaults(0) // 由 Service 控制
         }
 
-        notificationManager.notify(NOTIFICATION_ID_ALARM, builder.build())
+        return builder.build()
     }
 
     // ==================== 普通提醒通知（无声音，仅提示） ====================
@@ -201,12 +214,7 @@ object NotificationHelper {
     ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        val contentText = when {
-            targetReached -> "【$eventContent】目标日期已到达！"
-            daysRemaining == 0L -> "【$eventContent】就是今天！"
-            daysRemaining < 0 -> "【$eventContent】已过去 ${-daysRemaining} 天"
-            else -> "离【$eventContent】还有 ${daysRemaining} 天"
-        }
+        val contentText = buildContentText(eventContent, daysRemaining, targetReached)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -255,9 +263,12 @@ object NotificationHelper {
 
     // ==================== 取消通知 ====================
 
+    /**
+     * 取消闹钟通知（统一 ID）
+     */
     fun cancelAlarmNotification(context: Context) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(NOTIFICATION_ID_ALARM)
+        notificationManager.cancel(ALARM_NOTIFICATION_ID)
     }
 
     fun cancelAllNotifications(context: Context) {
@@ -271,9 +282,6 @@ object NotificationHelper {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    /**
-     * 检测闹钟通知渠道是否被关闭
-     */
     fun isAlarmChannelBlocked(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -284,9 +292,6 @@ object NotificationHelper {
         }
     }
 
-    /**
-     * 打开通知渠道设置
-     */
     fun openAlarmChannelSettings(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
@@ -295,6 +300,21 @@ object NotificationHelper {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
+        }
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private fun buildContentText(
+        eventContent: String,
+        daysRemaining: Long,
+        targetReached: Boolean
+    ): String {
+        return when {
+            targetReached -> "【$eventContent】目标日期已到达！"
+            daysRemaining == 0L -> "【$eventContent】就是今天！"
+            daysRemaining < 0 -> "【$eventContent】已过去 ${-daysRemaining} 天"
+            else -> "离【$eventContent】还有 $daysRemaining 天"
         }
     }
 }
