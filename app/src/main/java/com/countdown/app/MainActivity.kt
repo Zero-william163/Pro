@@ -463,38 +463,10 @@ fun MainScreen(
         }
     }
 
-    // ===== 关于页面（齿轮图标） =====
+    // ===== 设置页面（齿轮图标） =====
     if (showSettings) {
         SettingsDialog(
-            onDismiss = { showSettings = false },
-            onCheckUpdate = {
-                isCheckingUpdate = true
-                onCheckUpdate { result ->
-                    isCheckingUpdate = false
-                    result.onSuccess { updateResult ->
-                        when (updateResult) {
-                            is UpdateChecker.UpdateResult.UpdateAvailable -> {
-                                showUpdateDialog = updateResult
-                            }
-                            is UpdateChecker.UpdateResult.UpToDate -> {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("当前已是最新版本")
-                                }
-                            }
-                            is UpdateChecker.UpdateResult.LocalNewer -> {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("当前版本高于最新正式版")
-                                }
-                            }
-                        }
-                    }.onFailure {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("检查更新失败，请稍后重试")
-                        }
-                    }
-                }
-            },
-            isCheckingUpdate = isCheckingUpdate
+            onDismiss = { showSettings = false }
         )
     }
 
@@ -781,13 +753,11 @@ fun SimplePermissionCard(text: String, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
-    onDismiss: () -> Unit,
-    onCheckUpdate: () -> Unit,
-    isCheckingUpdate: Boolean
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("关于", style = MaterialTheme.typography.headlineSmall) },
+        title = { Text("设置", style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(
                 modifier = Modifier
@@ -810,20 +780,7 @@ fun SettingsDialog(
                     icon = Icons.Default.Tag,
                     iconBgColor = Color(0xFF10B981),
                     title = "当前版本",
-                    subtitle = "1.6.8"
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ===== 更新 =====
-                SettingsSectionTitle("更新")
-
-                SettingsRowCard(
-                    icon = Icons.Default.SystemUpdate,
-                    iconBgColor = Color(0xFFEC4899),
-                    title = "检查更新",
-                    subtitle = if (isCheckingUpdate) "正在检查…" else "点击检查新版本",
-                    onClick = onCheckUpdate
+                    subtitle = "1.6.9"
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -1010,27 +967,6 @@ fun EditSettingsDialog(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ===== 关于分组 =====
-                SettingsSectionTitle("关于")
-
-                SettingsRowCard(
-                    icon = Icons.Default.Info,
-                    iconBgColor = Color(0xFF3B82F6),
-                    title = "应用名称",
-                    subtitle = "目标倒计时"
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                SettingsRowCard(
-                    icon = Icons.Default.Tag,
-                    iconBgColor = Color(0xFF10B981),
-                    title = "当前版本",
-                    subtitle = "1.6.8"
-                )
             }
         },
         confirmButton = {
