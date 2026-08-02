@@ -37,13 +37,16 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -254,6 +257,8 @@ fun MainScreen(
     var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showWidgetPrompt by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     // ===== 启动时检测桌面小组件（真实检测，不使用 SharedPreferences） =====
     // 仅在应用启动时检测一次：如果桌面没有小组件且提醒已启用，才提示用户添加
@@ -382,6 +387,19 @@ fun MainScreen(
             // ===== Info Cards =====
             AnimatedEntrance(visible = contentVisible, delayMillis = 200) {
                 InfoCardItem(
+                    icon = Icons.Default.CalendarToday,
+                    title = "目标日期",
+                    value = DateCalculator.formatDate(countdownData.targetDate),
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    clickable = true,
+                    onClick = { showDatePicker = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AnimatedEntrance(visible = contentVisible, delayMillis = 250) {
+                InfoCardItem(
                     icon = Icons.Default.AccessTime,
                     title = "当前时间",
                     value = currentTime
@@ -397,7 +415,9 @@ fun MainScreen(
                     value = if (countdownData.reminderEnabled) {
                         "${DateCalculator.formatTime(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)} · ${DateCalculator.getNextReminderString(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)}"
                     } else "已关闭",
-                    valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    clickable = true,
+                    onClick = { showTimePicker = true }
                 )
             }
 
@@ -407,9 +427,23 @@ fun MainScreen(
                 InfoCardItem(
                     icon = if (countdownData.reminderEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
                     title = "提醒状态",
-                    value = if (countdownData.reminderEnabled) "已启用" else "已禁用",
+                    value = if (countdownData.reminderEnabled) "已启用（点击关闭）" else "已禁用（点击开启）",
                     valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    iconTint = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    iconTint = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    clickable = true,
+                    onClick = {
+                        val newEnabled = !countdownData.reminderEnabled
+                        scope.launch {
+                            repository.saveReminderEnabled(newEnabled)
+                            if (newEnabled) {
+                                AlarmScheduler.scheduleDailyAlarm(context, countdownData.reminderTimeHour, countdownData.reminderTimeMinute)
+                            } else {
+                                AlarmScheduler.cancelAlarm(context)
+                            }
+                            onUpdateWidget()
+                            refreshPermissions()
+                        }
+                    }
                 )
             }
 
@@ -425,6 +459,57 @@ fun MainScreen(
                     clickable = true,
                     onClick = onOpenRingtoneSettings
                 )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // ===== 主题模式 =====
+            AnimatedEntrance(visible = contentVisible, delayMillis = 550) {
+                var themeExpanded by remember { mutableStateOf(false) }
+                Box {
+                    InfoCardItem(
+                        icon = when (countdownData.themeMode) {
+                            CountdownData.THEME_DARK -> Icons.Default.DarkMode
+                            CountdownData.THEME_LIGHT -> Icons.Default.LightMode
+                            else -> Icons.Default.Settings
+                        },
+                        title = "主题模式",
+                        value = when (countdownData.themeMode) {
+                            CountdownData.THEME_DARK -> "深色模式"
+                            CountdownData.THEME_LIGHT -> "浅色模式"
+                            else -> "跟随系统"
+                        },
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        clickable = true,
+                        onClick = { themeExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = themeExpanded,
+                        onDismissRequest = { themeExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("跟随系统") },
+                            onClick = {
+                                scope.launch { repository.saveThemeMode(CountdownData.THEME_SYSTEM) }
+                                themeExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("浅色模式") },
+                            onClick = {
+                                scope.launch { repository.saveThemeMode(CountdownData.THEME_LIGHT) }
+                                themeExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("深色模式") },
+                            onClick = {
+                                scope.launch { repository.saveThemeMode(CountdownData.THEME_DARK) }
+                                themeExpanded = false
+                            }
+                        )
+                    }
+                }
             }
 
             // 旧版简单权限警告（保留作为兜底）
@@ -446,11 +531,11 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 编辑设置按钮
+            // 关于按钮
             AnimatedEntrance(visible = contentVisible, delayMillis = 600) {
                 com.countdown.app.ui.components.BrandButton(
-                    text = "编辑设置",
-                    icon = Icons.Default.Edit,
+                    text = "关于",
+                    icon = Icons.Default.Info,
                     onClick = { showSettings = true }
                 )
             }
@@ -459,33 +544,105 @@ fun MainScreen(
         }
     }
 
-    // ===== 设置对话框 =====
+    // ===== 设置对话框（仅关于页面） =====
     if (showSettings) {
         SettingsDialog(
-            data = countdownData,
             onDismiss = { showSettings = false },
-            onSave = { newData ->
-                scope.launch {
-                    repository.saveCountdownData(newData)
-                    if (newData.reminderEnabled) {
-                        AlarmScheduler.scheduleDailyAlarm(context, newData.reminderTimeHour, newData.reminderTimeMinute)
-                    } else {
-                        AlarmScheduler.cancelAlarm(context)
+            onCheckUpdate = {
+                isCheckingUpdate = true
+                onCheckUpdate { result ->
+                    isCheckingUpdate = false
+                    result.onSuccess { updateResult ->
+                        when (updateResult) {
+                            is UpdateChecker.UpdateResult.UpdateAvailable -> {
+                                showUpdateDialog = updateResult
+                            }
+                            is UpdateChecker.UpdateResult.UpToDate -> {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("当前已是最新版本")
+                                }
+                            }
+                            is UpdateChecker.UpdateResult.LocalNewer -> {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("当前版本高于最新正式版")
+                                }
+                            }
+                        }
+                    }.onFailure {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("检查更新失败，请稍后重试")
+                        }
                     }
-                    onUpdateWidget()
-                    snackbarHostState.showSnackbar("设置已保存")
-                    // 刷新权限状态
-                    refreshPermissions()
                 }
-                showSettings = false
-                if (newData.reminderEnabled) {
-                    // 真实检测桌面是否已有小组件，避免重复提示
-                    val appWidgetManager = AppWidgetManager.getInstance(context)
-                    val componentName = ComponentName(context, CountdownWidgetReceiver::class.java)
-                    val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-                    if (widgetIds.isEmpty()) {
-                        showWidgetPrompt = true
+            },
+            isCheckingUpdate = isCheckingUpdate
+        )
+    }
+
+    // ===== 日期选择器 =====
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = countdownData.targetDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selected = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        scope.launch {
+                            repository.saveTargetDate(selected)
+                            onUpdateWidget()
+                        }
                     }
+                    showDatePicker = false
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("取消")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // ===== 时间选择器 =====
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = countdownData.reminderTimeHour,
+            initialMinute = countdownData.reminderTimeMinute,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("选择提醒时间") },
+            text = { TimePicker(state = timePickerState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        repository.saveReminderTime(timePickerState.hour, timePickerState.minute)
+                        if (countdownData.reminderEnabled) {
+                            AlarmScheduler.scheduleDailyAlarm(context, timePickerState.hour, timePickerState.minute)
+                        }
+                        onUpdateWidget()
+                    }
+                    showTimePicker = false
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("取消")
                 }
             }
         )
@@ -744,145 +901,21 @@ fun SimplePermissionCard(text: String, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
-    data: CountdownData,
     onDismiss: () -> Unit,
-    onSave: (CountdownData) -> Unit
+    onCheckUpdate: () -> Unit,
+    isCheckingUpdate: Boolean
 ) {
-    var eventContent by remember { mutableStateOf(data.eventContent) }
-    var targetDate by remember { mutableStateOf(data.targetDate) }
-    var reminderHour by remember { mutableIntStateOf(data.reminderTimeHour) }
-    var reminderMinute by remember { mutableIntStateOf(data.reminderTimeMinute) }
-    var reminderEnabled by remember { mutableStateOf(data.reminderEnabled) }
-    var themeMode by remember { mutableIntStateOf(data.themeMode) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    val context = LocalContext.current
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑设置", style = MaterialTheme.typography.headlineSmall) },
+        title = { Text("关于", style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // ===== 日期与提醒分组 =====
-                SettingsSectionTitle("日期与提醒")
-
-                // 目标日期
-                SettingsRowCard(
-                    icon = Icons.Default.CalendarToday,
-                    iconBgColor = Color(0xFF6366F1),
-                    title = "目标日期",
-                    subtitle = DateCalculator.formatDate(targetDate),
-                    onClick = { showDatePicker = true }
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 提醒时间
-                SettingsRowCard(
-                    icon = Icons.Default.AccessTime,
-                    iconBgColor = Color(0xFF0EA5E9),
-                    title = "每日提醒时间",
-                    subtitle = DateCalculator.formatTime(reminderHour, reminderMinute),
-                    onClick = { showTimePicker = true }
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 启用每日提醒
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SettingsIcon(
-                            icon = if (reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                            bgColor = if (reminderEnabled) Color(0xFFEC4899) else Color(0xFF94A3B8)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            "启用每日提醒",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Switch(
-                            checked = reminderEnabled,
-                            onCheckedChange = { reminderEnabled = it }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ===== 外观分组 =====
-                SettingsSectionTitle("外观")
-
-                // 主题模式
-                var themeExpanded by remember { mutableStateOf(false) }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .clickable { themeExpanded = true },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SettingsIcon(
-                            icon = when (themeMode) {
-                                CountdownData.THEME_DARK -> Icons.Default.DarkMode
-                                CountdownData.THEME_LIGHT -> Icons.Default.LightMode
-                                else -> Icons.Default.Settings
-                            },
-                            bgColor = Color(0xFF8B5CF6)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("主题模式", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                when (themeMode) {
-                                    CountdownData.THEME_DARK -> "深色模式"
-                                    CountdownData.THEME_LIGHT -> "浅色模式"
-                                    else -> "跟随系统"
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = themeExpanded,
-                            onDismissRequest = { themeExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("跟随系统") },
-                                onClick = { themeMode = CountdownData.THEME_SYSTEM; themeExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("浅色模式") },
-                                onClick = { themeMode = CountdownData.THEME_LIGHT; themeExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("深色模式") },
-                                onClick = { themeMode = CountdownData.THEME_DARK; themeExpanded = false }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // ===== 关于分组 =====
-                SettingsSectionTitle("关于")
+                // ===== 应用信息 =====
+                SettingsSectionTitle("应用信息")
 
                 SettingsRowCard(
                     icon = Icons.Default.Info,
@@ -897,96 +930,71 @@ fun SettingsDialog(
                     icon = Icons.Default.Tag,
                     iconBgColor = Color(0xFF10B981),
                     title = "当前版本",
-                    subtitle = "1.6.6"
+                    subtitle = "1.6.7"
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ===== 更新 =====
+                SettingsSectionTitle("更新")
+
+                SettingsRowCard(
+                    icon = Icons.Default.SystemUpdate,
+                    iconBgColor = Color(0xFFEC4899),
+                    title = "检查更新",
+                    subtitle = if (isCheckingUpdate) "正在检查…" else "点击检查新版本",
+                    onClick = onCheckUpdate
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ===== 关于 =====
+                SettingsSectionTitle("关于")
+
+                SettingsRowCard(
+                    icon = Icons.Default.Info,
+                    iconBgColor = Color(0xFF6366F1),
+                    title = "关于软件",
+                    subtitle = "目标倒计时 - 精准倒计时提醒工具"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingsRowCard(
+                    icon = Icons.Default.Person,
+                    iconBgColor = Color(0xFF8B5CF6),
+                    title = "开发者信息",
+                    subtitle = "Zero-william163"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingsRowCard(
+                    icon = Icons.Default.Code,
+                    iconBgColor = Color(0xFFEC4899),
+                    title = "GitHub 仓库",
+                    subtitle = "github.com/Zero-william163/Pro"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SettingsRowCard(
+                    icon = Icons.Default.Description,
+                    iconBgColor = Color(0xFF0EA5E9),
+                    title = "开源协议",
+                    subtitle = "MIT License"
                 )
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    onSave(
-                        CountdownData(
-                            eventContent = eventContent.trim(),
-                            targetDate = targetDate,
-                            reminderTimeHour = reminderHour,
-                            reminderTimeMinute = reminderMinute,
-                            reminderEnabled = reminderEnabled,
-                            themeMode = themeMode
-                        )
-                    )
-                },
+                onClick = onDismiss,
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text("关闭")
             }
         }
     )
-
-    // 时间选择器
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState(
-            initialHour = reminderHour,
-            initialMinute = reminderMinute,
-            is24Hour = true
-        )
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            title = { Text("选择提醒时间") },
-            text = { TimePicker(state = timePickerState) },
-            confirmButton = {
-                TextButton(onClick = {
-                    reminderHour = timePickerState.hour
-                    reminderMinute = timePickerState.minute
-                    showTimePicker = false
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-
-    // 日期选择器
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = targetDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val selected = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        targetDate = selected
-                    }
-                    showDatePicker = false
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("取消")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
 }
 
 // ==================== 设置页面辅助组件 ====================

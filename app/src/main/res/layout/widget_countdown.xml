@@ -71,12 +71,12 @@
         android:background="#55FFFFFF"
         android:text="" />
 
-    <!-- ===== Bottom: Target Date + Reminder Time ===== -->
+    <!-- ===== Bottom: Target Date + Reminder Time (vertical to prevent truncation) ===== -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:orientation="horizontal">
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/widget_target"
@@ -87,18 +87,10 @@
             android:textSize="11sp" />
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginEnd="6dp"
-            android:text="·"
-            android:textColor="#80FFFFFF"
-            android:textSize="11sp" />
-
-        <TextView
             android:id="@+id/widget_reminder_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:text="未设置提醒"
             android:textColor="#B3FFFFFF"
             android:textSize="11sp" />
