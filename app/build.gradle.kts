@@ -12,8 +12,8 @@ android {
         applicationId = "com.countdown.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 162
-        versionName = "1.6.2"
+        versionCode = 163
+        versionName = "1.6.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -87,11 +87,6 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-
-    // Glance for widgets (modern widget toolkit)
-    implementation("androidx.glance:glance:1.0.0")
-    implementation("androidx.glance:glance-appwidget:1.0.0")
-    implementation("androidx.glance:glance-material3:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

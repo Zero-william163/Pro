@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Countdown Widget Provider Info
+    Countdown Widget Provider Info (Base — API 24+)
 
-    Configured for maximum launcher compatibility:
-    - 3x2 grid cells (compact but readable)
-    - Resizable both directions
-    - 30-min update period (system minimum)
-    - Uses mipmap icon as preview (not vector drawable)
+    Minimal attributes for maximum launcher compatibility.
+    API 31+ attributes (description, targetCellWidth, targetCellHeight)
+    are in xml-v31/countdown_widget_info.xml.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_countdown"
@@ -16,8 +14,4 @@
     android:minResizeHeight="110dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
-    android:widgetCategory="home_screen"
-    android:previewImage="@mipmap/ic_launcher"
-    android:targetCellWidth="3"
-    android:targetCellHeight="2"
-    android:description="@string/widget_description" />
+    android:widgetCategory="home_screen" />

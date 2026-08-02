@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Countdown Widget Provider Info (API 31+)
+
+    Adds API 31+ features:
+    - description (shown in widget picker)
+    - targetCellWidth / targetCellHeight (precise grid sizing)
+    - previewImage (uses adaptive icon)
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_countdown"
+    android:minWidth="180dp"
+    android:minHeight="140dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="110dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    android:previewImage="@mipmap/ic_launcher"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:description="@string/widget_description" />
