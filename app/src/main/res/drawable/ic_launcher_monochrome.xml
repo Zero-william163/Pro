@@ -2,8 +2,8 @@
 <!--
     Countdown App - Monochrome Icon (Android 13+)
 
-    Same design as foreground but simplified for themed icon support.
-    The system applies its own color to this layer.
+    Same hourglass design as foreground, simplified for themed icon support.
+    All shapes are solid white - the system applies its own color to this layer.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -11,15 +11,34 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Ring -->
+    <!-- Upper glass body -->
     <path
         android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M54,22 C36.3,22 22,36.3 22,54 C22,71.7 36.3,86 54,86 C71.7,86 86,71.7 86,54 C86,36.3 71.7,22 54,22 Z M54,28 C68.5,28 80,39.5 80,54 C80,68.5 68.5,80 54,80 C39.5,80 28,68.5 28,54 C28,39.5 39.5,28 54,28 Z" />
+        android:pathData="M35,34 L73,34 C73,34 66,44 60,49 C57,51 55,53 54,54 C53,53 51,51 48,49 C42,44 35,34 35,34 Z" />
 
-    <!-- Downward arrow -->
+    <!-- Lower glass body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M50,36 L58,36 L58,52 L65,52 L54,66 L43,52 L50,52 Z" />
+        android:pathData="M35,74 L73,74 C73,74 66,64 60,59 C57,57 55,55 54,54 C53,55 51,57 48,59 C42,64 35,74 35,74 Z" />
+
+    <!-- Sand in upper chamber -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M41,36 L67,36 C67,36 61,43 57,46.5 C55.5,47.5 54.5,49 54,50 C53.5,49 52.5,47.5 51,46.5 C47,43 41,36 41,36 Z" />
+
+    <!-- Sand pile in lower chamber -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M47,72 C47,72 50,67 54,67 C58,67 61,72 61,72 Z" />
+
+    <!-- Top plate (thick, rounded corners) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,29 L74,29 Q76,29 76,31 L76,32 Q76,34 74,34 L34,34 Q32,34 32,32 L32,31 Q32,29 34,29 Z" />
+
+    <!-- Bottom plate (thick, rounded corners) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,74 L74,74 Q76,74 76,76 L76,77 Q76,79 74,79 L34,79 Q32,79 32,77 L32,76 Q32,74 34,74 Z" />
 
 </vector>
