@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Countdown Widget - Redesigned Layout
+    Countdown Widget - Layout
 
-    Modern card-style widget with clear visual hierarchy:
-    - Top: Event name
-    - Center: Super-large countdown number (visual focal point)
-    - Bottom: Target date + reminder time
+    Uses ONLY RemoteViews-supported views:
+    - LinearLayout
+    - TextView
+    - View
 
-    All text uses color resources for dark mode support.
+    All colors are hardcoded to avoid resource resolution failures
+    on certain launchers (Huawei, MIUI, OneUI, etc.)
+
+    The background is set programmatically by the WidgetReceiver
+    based on dark/light mode detection.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_container"
@@ -26,10 +30,9 @@
         android:ellipsize="end"
         android:maxLines="1"
         android:text="事件"
-        android:textColor="@color/widget_text_primary"
+        android:textColor="#FFFFFFFF"
         android:textSize="15sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.02" />
+        android:textStyle="bold" />
 
     <!-- ===== Center: Super-large countdown number + unit ===== -->
     <LinearLayout
@@ -44,10 +47,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0"
-            android:textColor="@color/widget_text_primary"
+            android:textColor="#FFFFFFFF"
             android:textSize="56sp"
             android:textStyle="bold"
-            android:letterSpacing="-0.03"
             android:includeFontPadding="false" />
 
         <TextView
@@ -57,7 +59,7 @@
             android:layout_marginStart="6dp"
             android:layout_marginBottom="8dp"
             android:text="天"
-            android:textColor="@color/widget_text_secondary"
+            android:textColor="#B3FFFFFF"
             android:textSize="16sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -68,8 +70,7 @@
         android:layout_height="1dp"
         android:layout_marginTop="10dp"
         android:layout_marginBottom="8dp"
-        android:background="#33FFFFFF"
-        android:alpha="0.5" />
+        android:background="#55FFFFFF" />
 
     <!-- ===== Bottom: Target Date + Reminder Time ===== -->
     <LinearLayout
@@ -83,7 +84,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="目标日期"
-            android:textColor="@color/widget_text_secondary"
+            android:textColor="#B3FFFFFF"
             android:textSize="11sp" />
 
         <TextView
@@ -92,7 +93,7 @@
             android:layout_marginStart="6dp"
             android:layout_marginEnd="6dp"
             android:text="·"
-            android:textColor="@color/widget_text_tertiary"
+            android:textColor="#80FFFFFF"
             android:textSize="11sp" />
 
         <TextView
@@ -100,7 +101,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="未设置提醒"
-            android:textColor="@color/widget_text_secondary"
+            android:textColor="#B3FFFFFF"
             android:textSize="11sp" />
     </LinearLayout>
 

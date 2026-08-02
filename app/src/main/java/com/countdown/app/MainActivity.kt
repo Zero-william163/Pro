@@ -182,7 +182,7 @@ class MainActivity : ComponentActivity() {
                             ContextCompat.startForegroundService(this, intent)
                         },
                         onUpdateWidget = {
-                            updateWidgets()
+                            CountdownWidgetReceiver.updateAllWidgets(this@MainActivity)
                         }
                     )
                 }
@@ -193,16 +193,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // 每次回到主界面刷新小组件
-        updateWidgets()
-    }
-
-    private fun updateWidgets() {
-        val appWidgetManager = AppWidgetManager.getInstance(this)
-        val componentName = ComponentName(this, CountdownWidgetReceiver::class.java)
-        val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
-        for (appWidgetId in appWidgetIds) {
-            CountdownWidgetReceiver.updateWidget(this, appWidgetManager, appWidgetId)
-        }
+        CountdownWidgetReceiver.updateAllWidgets(this)
     }
 }
 

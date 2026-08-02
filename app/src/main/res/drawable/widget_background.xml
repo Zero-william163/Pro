@@ -2,8 +2,8 @@
 <!--
     Countdown Widget - Background (Light Mode)
 
-    Modern gradient: Indigo → Sky Blue
-    Rounded corners with subtle shadow.
+    Uses hardcoded colors to avoid RemoteViews resource resolution issues
+    on certain launchers (Huawei, MIUI, etc.)
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -15,7 +15,7 @@
         </shape>
     </item>
 
-    <!-- Gradient main layer -->
+    <!-- Gradient main layer: Indigo → Sky Blue -->
     <item
         android:left="1dp"
         android:top="1dp"
@@ -24,8 +24,8 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="135"
-                android:startColor="@color/widget_gradient_start"
-                android:endColor="@color/widget_gradient_end" />
+                android:startColor="#FF4F46E5"
+                android:endColor="#FF0EA5E9" />
             <corners android:radius="23dp" />
         </shape>
     </item>

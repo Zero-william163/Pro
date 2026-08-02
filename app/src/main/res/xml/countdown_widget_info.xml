@@ -2,11 +2,11 @@
 <!--
     Countdown Widget Provider Info
 
-    Configured for modern Android widget experience:
+    Configured for maximum launcher compatibility:
     - 3x2 grid cells (compact but readable)
     - Resizable both directions
     - 30-min update period (system minimum)
-    - Light/dark mode auto-adapt via resource qualifiers
+    - Uses mipmap icon as preview (not vector drawable)
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_countdown"
@@ -17,7 +17,7 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/ic_launcher_foreground"
+    android:previewImage="@mipmap/ic_launcher"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:description="@string/widget_description" />

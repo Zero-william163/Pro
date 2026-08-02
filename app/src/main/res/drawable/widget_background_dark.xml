@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Countdown Widget - Dark Background (explicit dark version)
+    Countdown Widget - Background (Dark Mode)
 
-    Used programmatically by the widget receiver for dark mode.
-    The drawable-night/widget_background.xml handles automatic adaptation.
+    Used programmatically when system is in dark mode.
+    Uses hardcoded colors for maximum compatibility.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -15,7 +15,7 @@
         </shape>
     </item>
 
-    <!-- Dark gradient main layer -->
+    <!-- Dark gradient main layer: Deep Indigo → Dark Navy -->
     <item
         android:left="1dp"
         android:top="1dp"
@@ -24,8 +24,8 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="135"
-                android:startColor="@color/widget_gradient_start"
-                android:endColor="@color/widget_gradient_end" />
+                android:startColor="#FF312E81"
+                android:endColor="#FF0C4A6E" />
             <corners android:radius="23dp" />
         </shape>
     </item>

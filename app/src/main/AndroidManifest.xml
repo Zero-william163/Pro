@@ -174,12 +174,6 @@
                 android:resource="@xml/countdown_widget_info" />
         </receiver>
 
-        <service
-            android:name=".widget.CountdownWidgetService"
-            android:enabled="true"
-            android:exported="false"
-            android:permission="android.permission.BIND_REMOTEVIEWS" />
-
         <!-- ==================== FileProvider ==================== -->
 
         <provider
