@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -101,12 +102,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.countdown.app.data.CountdownData
 import com.countdown.app.data.CountdownRepository
+import com.countdown.app.service.DownloadService
 import com.countdown.app.ui.components.AnimatedEntrance
 import com.countdown.app.ui.components.CountdownHeroCard
 import com.countdown.app.ui.components.InfoCardItem
 import com.countdown.app.ui.permission.PermissionActivity
 import com.countdown.app.ui.ringtone.RingtoneSettingsActivity
 import com.countdown.app.ui.theme.CountdownTheme
+import com.countdown.app.update.UpdateChecker
 import com.countdown.app.util.AlarmScheduler
 import com.countdown.app.util.DateCalculator
 import com.countdown.app.util.NotificationHelper
@@ -167,6 +170,19 @@ class MainActivity : ComponentActivity() {
                         onOpenRingtoneSettings = {
                             RingtoneSettingsActivity.start(this)
                         },
+                        onCheckUpdate = { onUpdateCheckResult ->
+                            lifecycleScope.launch {
+                                val result = UpdateChecker.checkUpdate(this@MainActivity)
+                                onUpdateCheckResult(result)
+                            }
+                        },
+                        onStartDownload = { url, versionName ->
+                            val intent = Intent(this, DownloadService::class.java).apply {
+                                putExtra(DownloadService.EXTRA_DOWNLOAD_URL, url)
+                                putExtra(DownloadService.EXTRA_VERSION_NAME, versionName)
+                            }
+                            ContextCompat.startForegroundService(this, intent)
+                        },
                         onUpdateWidget = {
                             CountdownWidgetReceiver.updateAllWidgets(this@MainActivity)
                         }
@@ -191,6 +207,8 @@ fun MainScreen(
     onOpenNotificationSettings: () -> Unit,
     onOpenPermissionCenter: () -> Unit,
     onOpenRingtoneSettings: () -> Unit,
+    onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
+    onStartDownload: (String, String) -> Unit,
     onUpdateWidget: () -> Unit
 ) {
     val context = LocalContext.current
@@ -233,6 +251,8 @@ fun MainScreen(
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
     var showWidgetPrompt by remember { mutableStateOf(false) }
 
     // ===== 启动时检测桌面小组件（真实检测，不使用 SharedPreferences） =====
@@ -271,6 +291,39 @@ fun MainScreen(
                     }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
+                    }
+                    IconButton(onClick = {
+                        isCheckingUpdate = true
+                        onCheckUpdate { result ->
+                            isCheckingUpdate = false
+                            result.onSuccess { updateResult ->
+                                when (updateResult) {
+                                    is UpdateChecker.UpdateResult.UpdateAvailable -> {
+                                        showUpdateDialog = updateResult
+                                    }
+                                    is UpdateChecker.UpdateResult.UpToDate -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("当前已是最新版本")
+                                        }
+                                    }
+                                    is UpdateChecker.UpdateResult.LocalNewer -> {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("当前版本高于最新正式版")
+                                        }
+                                    }
+                                }
+                            }.onFailure { e ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("检查更新失败，请稍后重试")
+                                }
+                            }
+                        }
+                    }) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = "检查更新")
+                        }
                     }
                 }
             )
@@ -465,6 +518,47 @@ fun MainScreen(
             dismissButton = {
                 TextButton(onClick = { showWidgetPrompt = false }) {
                     Text("以后再说")
+                }
+            }
+        )
+    }
+
+    // ===== 更新对话框 =====
+    showUpdateDialog?.let { updateInfo ->
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = null },
+            title = { Text("发现新版本 v${updateInfo.remoteVersion.tagName}") },
+            text = {
+                Column {
+                    Text(
+                        "当前版本: ${updateInfo.installedVersion.versionName}\n" +
+                        "新版本: ${updateInfo.remoteVersion.tagName}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (updateInfo.remoteVersion.releaseNotes.isNotBlank()) {
+                        Text(
+                            updateInfo.remoteVersion.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onStartDownload(
+                        updateInfo.remoteVersion.downloadUrl,
+                        updateInfo.remoteVersion.tagName
+                    )
+                    showUpdateDialog = null
+                    scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
+                }) {
+                    Text("下载更新")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = null }) {
+                    Text("稍后")
                 }
             }
         )
@@ -674,20 +768,6 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // ===== 事件内容 =====
-                SettingsSectionTitle("事件")
-                OutlinedTextField(
-                    value = eventContent,
-                    onValueChange = { eventContent = it },
-                    label = { Text("事件内容") },
-                    placeholder = { Text("例如：高考、生日、旅行") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
                 // ===== 日期与提醒分组 =====
                 SettingsSectionTitle("日期与提醒")
 
@@ -817,7 +897,7 @@ fun SettingsDialog(
                     icon = Icons.Default.Tag,
                     iconBgColor = Color(0xFF10B981),
                     title = "当前版本",
-                    subtitle = "1.6.5"
+                    subtitle = "1.6.6"
                 )
             }
         },
