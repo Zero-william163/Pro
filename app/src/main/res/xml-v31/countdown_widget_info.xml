@@ -5,7 +5,9 @@
     Adds API 31+ features:
     - description (shown in widget picker)
     - targetCellWidth / targetCellHeight (precise grid sizing)
-    - previewImage (uses adaptive icon)
+
+    Note: previewImage removed — adaptive icons can crash some launchers
+    when used as widget preview. The system uses a default preview instead.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_countdown"
@@ -16,7 +18,6 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen"
-    android:previewImage="@mipmap/ic_launcher"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:description="@string/widget_description" />

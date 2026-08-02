@@ -2,16 +2,14 @@
 <!--
     Countdown Widget - Layout
 
-    Uses ONLY RemoteViews-supported views:
-    - LinearLayout
-    - TextView
-    - View
+    IMPORTANT: Only use RemoteViews-supported views!
+    Supported: LinearLayout, RelativeLayout, FrameLayout, GridLayout,
+               TextView, ImageView, Button, ImageButton, ProgressBar,
+               Chronometer, AnalogClock, TextClock, ViewStub
 
-    All colors are hardcoded to avoid resource resolution failures
-    on certain launchers (Huawei, MIUI, OneUI, etc.)
+    DO NOT USE: View (NOT supported!), Space, RecyclerView, etc.
 
-    The background is set programmatically by the WidgetReceiver
-    based on dark/light mode detection.
+    All colors are hardcoded to avoid resource resolution failures.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_container"
@@ -64,13 +62,14 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- ===== Divider ===== -->
-    <View
+    <!-- ===== Divider (using TextView instead of View — View is NOT RemoteViews-supported!) ===== -->
+    <TextView
         android:layout_width="40dp"
         android:layout_height="1dp"
         android:layout_marginTop="10dp"
         android:layout_marginBottom="8dp"
-        android:background="#55FFFFFF" />
+        android:background="#55FFFFFF"
+        android:text="" />
 
     <!-- ===== Bottom: Target Date + Reminder Time ===== -->
     <LinearLayout

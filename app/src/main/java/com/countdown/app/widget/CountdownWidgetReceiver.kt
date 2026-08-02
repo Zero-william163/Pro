@@ -17,6 +17,7 @@ import com.countdown.app.util.DateCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -123,12 +124,11 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
             }
 
             // ===== Step 2: Load countdown data =====
-            // runBlocking is safe here because this method is always called
-            // from Dispatchers.IO (via onUpdate's goAsync or updateAllWidgets' coroutine)
+            // Call flow.first() directly to avoid nested runBlocking in getCountdownDataSync()
             val data = try {
                 runBlocking {
                     withTimeoutOrNull(DATA_LOAD_TIMEOUT_MS) {
-                        CountdownRepository.getInstance(context).getCountdownDataSync()
+                        CountdownRepository.getInstance(context).countdownDataFlow.first()
                     }
                 }
             } catch (e: Exception) {
