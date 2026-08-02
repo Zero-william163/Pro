@@ -23,8 +23,12 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.view.WindowManager
+import android.widget.Toast
+import com.countdown.app.data.CountdownData
+import com.countdown.app.data.CountdownRepository
 import com.countdown.app.util.NotificationHelper
 import com.countdown.app.util.PermissionChecker
+import com.countdown.app.util.RingtoneManager as AppRingtoneManager
 
 /**
  * 闹钟前台服务（重构 v4）
@@ -473,14 +477,24 @@ class AlarmService : Service() {
         if (mediaPlayer != null) return
 
         try {
-            val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-
-            if (alarmUri == null) {
-                Log.e(TAG, "No default ringtone URI available")
-                return
+            // 检查当前铃声是否有效（用户可能删除了文件或权限失效）
+            val isRingtoneValid = AppRingtoneManager.isCurrentRingtoneValid(this)
+            if (!isRingtoneValid) {
+                // 铃声失效，提示用户已恢复默认
+                Log.w(TAG, "Custom ringtone is invalid, falling back to default")
+                handler.post {
+                    Toast.makeText(
+                        this@AlarmService,
+                        "当前铃声不存在，已恢复为默认闹钟铃声",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
+
+            // 获取铃声 URI（RingtoneManager 会自动处理回退到默认）
+            val alarmUri = AppRingtoneManager.getAlarmRingtoneUri(this)
+
+            Log.d(TAG, "Using ringtone URI: $alarmUri")
 
             mediaPlayer = MediaPlayer().apply {
                 setDataSource(this@AlarmService, alarmUri)
@@ -504,22 +518,20 @@ class AlarmService : Service() {
 
     private fun tryFallbackSound() {
         try {
-            val fallbackUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            if (fallbackUri != null) {
-                mediaPlayer = MediaPlayer().apply {
-                    setDataSource(this@AlarmService, fallbackUri)
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    isLooping = true
-                    prepare()
-                    start()
-                }
-                Log.d(TAG, "Fallback sound started")
+            val fallbackUri = AppRingtoneManager.getDefaultAlarmUri()
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(this@AlarmService, fallbackUri)
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                isLooping = true
+                prepare()
+                start()
             }
+            Log.d(TAG, "Fallback sound started with default alarm ringtone")
         } catch (e: Exception) {
             Log.e(TAG, "Fallback sound also failed", e)
         }

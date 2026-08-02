@@ -4,12 +4,22 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.widget.RemoteViews
 import com.countdown.app.R
 import com.countdown.app.data.CountdownRepository
 import com.countdown.app.util.DateCalculator
 import kotlinx.coroutines.runBlocking
 
+/**
+ * Countdown Widget Receiver (Redesigned)
+ *
+ * Features:
+ * - Automatic dark/light mode background adaptation
+ * - Modern card-style layout with large countdown number
+ * - Click to open app
+ * - Efficient data loading with error handling
+ */
 class CountdownWidgetReceiver : AppWidgetProvider() {
 
     override fun onUpdate(
@@ -22,16 +32,6 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
         }
     }
 
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        // Widget added
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        // Last widget removed
-    }
-
     companion object {
         fun updateWidget(
             context: Context,
@@ -40,6 +40,18 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_countdown)
 
+            // ===== Dark mode detection: set appropriate background =====
+            val isDarkMode = (context.resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+            val bgDrawable = if (isDarkMode) {
+                R.drawable.widget_background_dark
+            } else {
+                R.drawable.widget_background
+            }
+            views.setInt(R.id.widget_container, "setBackgroundResource", bgDrawable)
+
+            // ===== Load countdown data =====
             val data = runBlocking {
                 try {
                     CountdownRepository.getInstance(context).getCountdownDataSync()
@@ -64,7 +76,7 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
                     daysRemaining <= 0 -> "天前"
                     else -> "天"
                 }
-                val targetText = "目标: ${DateCalculator.formatDate(data.targetDate)}"
+                val targetText = DateCalculator.formatDate(data.targetDate)
                 val reminderText = if (data.reminderEnabled) {
                     "提醒 ${DateCalculator.formatTime(data.reminderTimeHour, data.reminderTimeMinute)}"
                 } else {
@@ -84,7 +96,7 @@ class CountdownWidgetReceiver : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_reminder_time, "未设置提醒")
             }
 
-            // Click to open app
+            // ===== Click to open app =====
             val intent = Intent(context, com.countdown.app.MainActivity::class.java)
             val pendingIntent = android.app.PendingIntent.getActivity(
                 context,

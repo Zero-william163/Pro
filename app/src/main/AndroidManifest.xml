@@ -73,6 +73,20 @@
             android:theme="@style/Theme.Countdown"
             android:label="@string/permission_center_title" />
 
+        <!-- 权限帮助中心 -->
+        <activity
+            android:name=".ui.permission.PermissionHelpActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Countdown"
+            android:label="@string/permission_help_title" />
+
+        <!-- 铃声设置页面 -->
+        <activity
+            android:name=".ui.ringtone.RingtoneSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Countdown"
+            android:label="@string/ringtone_settings_title" />
+
         <!-- 全屏闹钟 Activity -->
         <!-- 关键属性说明：
              - excludeFromRecents: 不在最近任务列表显示

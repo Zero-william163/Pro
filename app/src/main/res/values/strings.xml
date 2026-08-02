@@ -73,4 +73,41 @@
     <string name="huawei_tip_auto_start">1. 允许应用自启动</string>
     <string name="huawei_tip_battery">2. 电池优化设为「手动管理」</string>
     <string name="huawei_tip_lock">3. 加入锁屏清理白名单</string>
+
+    <!-- ======== 权限帮助中心 ======== -->
+    <string name="permission_help_title">权限帮助</string>
+    <string name="permission_help_subtitle">选择您的手机品牌查看详细教程</string>
+    <string name="permission_help_select_brand">选择手机品牌</string>
+    <string name="permission_help_select_permission">选择需要帮助的权限</string>
+    <string name="permission_help_step_title">操作步骤</string>
+    <string name="permission_help_notes_title">注意事项</string>
+    <string name="permission_help_no_guide">暂无此品牌的相关教程</string>
+    <string name="permission_help_generic_guide">Android 通用教程</string>
+
+    <!-- ======== 闹钟铃声设置 ======== -->
+    <string name="ringtone_settings_title">闹钟铃声</string>
+    <string name="ringtone_current">当前铃声</string>
+    <string name="ringtone_default">系统默认闹钟铃声</string>
+    <string name="ringtone_select_system">选择系统铃声</string>
+    <string name="ringtone_select_file">选择本地音频文件</string>
+    <string name="ringtone_preview">试听</string>
+    <string name="ringtone_stop_preview">停止试听</string>
+    <string name="ringtone_use_default">恢复默认铃声</string>
+    <string name="ringtone_file_selected">已选择：%1$s</string>
+    <string name="ringtone_file_error">无法读取该音频文件，请重试</string>
+    <string name="ringtone_not_found">当前铃声不存在，已恢复为默认闹钟铃声</string>
+    <string name="ringtone_preview_error">无法播放该铃声</string>
+    <string name="ringtone_type_alarm">系统闹钟铃声</string>
+    <string name="ringtone_type_notification">系统通知铃声</string>
+    <string name="ringtone_type_ringtone">系统来电铃声</string>
+    <string name="ringtone_supported_formats">支持 MP3、WAV、OGG、FLAC 等格式</string>
+    <string name="ringtone_persistence_note">铃声设置会在应用关闭、手机重启后保持有效</string>
+
+    <!-- ======== 权限详细引导 ======== -->
+    <string name="permission_guide_title">详细操作指南</string>
+    <string name="permission_guide_why_required">为什么需要此权限</string>
+    <string name="permission_guide_consequence">不开启的后果</string>
+    <string name="permission_guide_steps">操作步骤</string>
+    <string name="permission_guide_view_help">查看详细教程</string>
+    <string name="permission_guide_select_brand_hint">请选择您的手机品牌查看对应操作路径</string>
 </resources>

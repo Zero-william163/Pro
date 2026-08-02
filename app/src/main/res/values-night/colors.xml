@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark mode widget gradient -->
+    <color name="widget_gradient_start">#FF312E81</color>
+    <color name="widget_gradient_end">#FF0C4A6E</color>
+
+    <!-- Dark mode widget text (still white on dark gradient) -->
+    <color name="widget_text_primary">#FFFFFFFF</color>
+    <color name="widget_text_secondary">#B3FFFFFF</color>
+    <color name="widget_text_tertiary">#80FFFFFF</color>
+</resources>

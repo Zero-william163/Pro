@@ -29,12 +29,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
@@ -87,6 +89,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.countdown.app.ui.theme.CountdownTheme
 import com.countdown.app.util.PermissionChecker
+import com.countdown.app.util.PermissionGuideData
 import kotlinx.coroutines.delay
 
 /**
@@ -167,6 +170,9 @@ fun PermissionScreen(onBack: () -> Unit) {
     // 用户确认对话框状态（厂商权限「我已开启」）
     var confirmItem by remember { mutableStateOf<PermissionChecker.PermissionItem?>(null) }
 
+    // 详细操作指南对话框状态
+    var guideDialogItem by remember { mutableStateOf<PermissionChecker.PermissionItem?>(null) }
+
     // Snackbar 消息
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
@@ -219,6 +225,15 @@ fun PermissionScreen(onBack: () -> Unit) {
         )
     }
 
+    // 详细操作指南对话框
+    guideDialogItem?.let { item ->
+        PermissionGuideDialog(
+            item = item,
+            deviceBrand = permissionResult.deviceBrand,
+            onDismiss = { guideDialogItem = null }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -234,6 +249,9 @@ fun PermissionScreen(onBack: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { PermissionHelpActivity.start(context) }) {
+                        Icon(Icons.Default.HelpOutline, contentDescription = "权限帮助")
+                    }
                     IconButton(onClick = { refreshPermissions() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
@@ -287,6 +305,7 @@ fun PermissionScreen(onBack: () -> Unit) {
                                 }
                             }
                         },
+                        onViewGuide = { guideDialogItem = item },
                         delayMillis = index * 80
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -318,6 +337,7 @@ fun PermissionScreen(onBack: () -> Unit) {
                                 }
                             }
                         },
+                        onViewGuide = { guideDialogItem = item },
                         delayMillis = (criticalItems.size + index) * 80
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -362,6 +382,7 @@ fun PermissionScreen(onBack: () -> Unit) {
                             refreshPermissions()
                             snackbarMessage = "${item.title} 已重置，请重新确认"
                         },
+                        onViewGuide = { guideDialogItem = item },
                         delayMillis = (criticalItems.size + recommendedItems.size + index) * 80
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -508,6 +529,7 @@ fun PermissionCard(
     onActionClick: () -> Unit,
     onConfirmClick: () -> Unit = {},
     onResetConfirm: () -> Unit = {},
+    onViewGuide: () -> Unit = {},
     delayMillis: Int
 ) {
     var visible by remember { mutableStateOf(false) }
@@ -524,7 +546,8 @@ fun PermissionCard(
             item = item,
             onActionClick = onActionClick,
             onConfirmClick = onConfirmClick,
-            onResetConfirm = onResetConfirm
+            onResetConfirm = onResetConfirm,
+            onViewGuide = onViewGuide
         )
     }
 }
@@ -534,7 +557,8 @@ fun PermissionCardContent(
     item: PermissionChecker.PermissionItem,
     onActionClick: () -> Unit,
     onConfirmClick: () -> Unit = {},
-    onResetConfirm: () -> Unit = {}
+    onResetConfirm: () -> Unit = {},
+    onViewGuide: () -> Unit = {}
 ) {
     // 状态颜色
     // 绿色 = 已开启（API 检测）或 已确认（用户手动确认）
@@ -795,6 +819,34 @@ fun PermissionCardContent(
                     }
                 }
             }
+
+            // ===== 查看详细教程按钮 =====
+            if (item.guideId.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onViewGuide,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 8.dp, vertical = 0.dp
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HelpOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "查看详细教程",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -979,4 +1031,210 @@ fun ConfirmPermissionDialog(
             }
         }
     )
+}
+
+// ==================== 详细操作指南对话框 ====================
+
+@Composable
+fun PermissionGuideDialog(
+    item: PermissionChecker.PermissionItem,
+    deviceBrand: String,
+    onDismiss: () -> Unit
+) {
+    // 从 PermissionGuideData 获取引导数据
+    val guide = if (item.guideId.isNotEmpty()) {
+        PermissionGuideData.getGuideByPermissionId(item.guideId)
+    } else null
+
+    // 获取当前品牌对应的引导（如果没有则使用通用引导）
+    val brandGuide = guide?.let { g ->
+        // 尝试匹配检测到的品牌
+        val matchedBrand = PermissionGuideData.ALL_BRANDS.find { brand ->
+            deviceBrand.contains(brand, ignoreCase = true) || brand.contains(deviceBrand, ignoreCase = true)
+        }
+        matchedBrand?.let { g.brandGuides[it] } ?: g.genericGuide
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.HelpOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = guide?.permissionName ?: item.title,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                if (guide != null && brandGuide != null) {
+                    // 品牌标识
+                    Text(
+                        text = "操作路径（${brandGuide.brandName}）",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 步骤列表
+                    brandGuide.steps.forEachIndexed { index, step ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            // 步骤编号圆圈
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${index + 1}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            // 步骤内容
+                            Column(modifier = Modifier.weight(1f)) {
+                                if (step.iconHint.isNotEmpty()) {
+                                    Text(
+                                        text = step.iconHint,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Text(
+                                    text = step.stepText,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                        // 步骤之间的箭头
+                        if (index < brandGuide.steps.size - 1) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // 注意事项
+                    if (brandGuide.notes.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFFFF8E1))
+                                .padding(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF8F00),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = brandGuide.notes,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF5D4037),
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 为什么需要
+                    GuideDialogInfoSection(
+                        label = "为什么需要此权限",
+                        content = guide.whyRequired,
+                        color = MaterialTheme.colorScheme.primary,
+                        bgColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 不开启的后果
+                    GuideDialogInfoSection(
+                        label = "不开启会导致",
+                        content = guide.consequenceIfDisabled,
+                        color = RedColor,
+                        bgColor = RedBgColor
+                    )
+                } else {
+                    // 没有引导数据
+                    Text(
+                        text = "暂无此权限的详细操作指南。\n\n请点击「立即开启」按钮跳转到系统设置页面，或点击顶部「权限帮助」查看所有品牌教程。",
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("我知道了", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    )
+}
+
+@Composable
+private fun GuideDialogInfoSection(
+    label: String,
+    content: String,
+    color: Color,
+    bgColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .padding(10.dp)
+    ) {
+        Column {
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = color
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = content,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                lineHeight = 17.sp
+            )
+        }
+    }
 }

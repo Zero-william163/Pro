@@ -1,31 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- Main Activity Theme (light) -->
     <style name="Theme.Countdown" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/background_light</item>
     </style>
 
-    <!--
-        全屏闹钟主题（重构 v2）
-
-        【关键修复】移除了 windowIsTranslucent 和透明背景：
-        - windowIsTranslucent=true 会导致 FullScreenIntent 在部分设备（尤其华为）上无法弹出
-        - 透明背景导致 Activity 透过底层，不符合闹钟全屏体验
-        - 部分厂商系统会阻止半透明 Activity 显示在锁屏之上
-
-        现在使用不透明深色背景，配合 Activity 内部的 Compose 渐变背景实现全屏效果。
-    -->
+    <!-- Full-screen Alarm Theme -->
     <style name="Theme.Countdown.FullScreen" parent="android:Theme.Material.NoActionBar">
-        <!-- 不透明背景（深色），避免半透明导致 FullScreenIntent 失效 -->
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <!-- 允许内容延伸到刘海区域 -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <!-- 无标题栏 -->
         <item name="android:windowNoTitle">true</item>
-        <!-- 全屏 -->
         <item name="android:windowFullscreen">false</item>
     </style>
+
 </resources>

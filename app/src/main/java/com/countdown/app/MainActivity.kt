@@ -19,6 +19,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +34,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
@@ -98,7 +101,11 @@ import androidx.lifecycle.lifecycleScope
 import com.countdown.app.data.CountdownData
 import com.countdown.app.data.CountdownRepository
 import com.countdown.app.service.DownloadService
+import com.countdown.app.ui.components.AnimatedEntrance
+import com.countdown.app.ui.components.CountdownHeroCard
+import com.countdown.app.ui.components.InfoCardItem
 import com.countdown.app.ui.permission.PermissionActivity
+import com.countdown.app.ui.ringtone.RingtoneSettingsActivity
 import com.countdown.app.ui.theme.CountdownTheme
 import com.countdown.app.update.UpdateChecker
 import com.countdown.app.util.AlarmScheduler
@@ -158,6 +165,9 @@ class MainActivity : ComponentActivity() {
                         onOpenPermissionCenter = {
                             PermissionActivity.start(this)
                         },
+                        onOpenRingtoneSettings = {
+                            RingtoneSettingsActivity.start(this)
+                        },
                         onCheckUpdate = { onUpdateCheckResult ->
                             lifecycleScope.launch {
                                 val result = UpdateChecker.checkUpdate(this@MainActivity)
@@ -203,6 +213,7 @@ fun MainScreen(
     onRequestAlarmPermission: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onOpenPermissionCenter: () -> Unit,
+    onOpenRingtoneSettings: () -> Unit,
     onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
     onStartDownload: (String, String) -> Unit,
     onUpdateWidget: () -> Unit
@@ -357,35 +368,71 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // ===== 主倒计时卡片 =====
-            MainCountdownCard(
-                eventContent = countdownData.eventContent,
-                daysRemaining = daysRemaining,
-                targetReached = targetReached,
-                targetDate = countdownData.targetDate
-            )
+            // ===== Hero Countdown Card (visual center) =====
+            AnimatedEntrance(visible = contentVisible, delayMillis = 100) {
+                CountdownHeroCard(
+                    eventContent = countdownData.eventContent,
+                    daysRemaining = daysRemaining,
+                    targetReached = targetReached,
+                    targetDate = DateCalculator.formatDate(countdownData.targetDate),
+                    reminderText = if (countdownData.reminderEnabled) {
+                        DateCalculator.formatTime(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)
+                    } else "未设置",
+                    nextReminder = if (countdownData.reminderEnabled) {
+                        DateCalculator.getNextReminderString(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)
+                    } else ""
+                )
+            }
 
-            // ===== 信息卡片 =====
-            InfoCard(
-                icon = Icons.Default.AccessTime,
-                title = "当前时间",
-                value = currentTime
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            InfoCard(
-                icon = Icons.Default.NotificationsActive,
-                title = "每日提醒",
-                value = if (countdownData.reminderEnabled) {
-                    "${DateCalculator.formatTime(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)} (${DateCalculator.getNextReminderString(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)})"
-                } else "已关闭"
-            )
+            // ===== Info Cards =====
+            AnimatedEntrance(visible = contentVisible, delayMillis = 200) {
+                InfoCardItem(
+                    icon = Icons.Default.AccessTime,
+                    title = "当前时间",
+                    value = currentTime
+                )
+            }
 
-            InfoCard(
-                icon = if (countdownData.reminderEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
-                title = "提醒状态",
-                value = if (countdownData.reminderEnabled) "已启用" else "已禁用",
-                valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AnimatedEntrance(visible = contentVisible, delayMillis = 300) {
+                InfoCardItem(
+                    icon = Icons.Default.NotificationsActive,
+                    title = "每日提醒",
+                    value = if (countdownData.reminderEnabled) {
+                        "${DateCalculator.formatTime(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)} · ${DateCalculator.getNextReminderString(countdownData.reminderTimeHour, countdownData.reminderTimeMinute)}"
+                    } else "已关闭",
+                    valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AnimatedEntrance(visible = contentVisible, delayMillis = 400) {
+                InfoCardItem(
+                    icon = if (countdownData.reminderEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                    title = "提醒状态",
+                    value = if (countdownData.reminderEnabled) "已启用" else "已禁用",
+                    valueColor = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    iconTint = if (countdownData.reminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // ===== 闹钟铃声设置入口 =====
+            AnimatedEntrance(visible = contentVisible, delayMillis = 500) {
+                InfoCardItem(
+                    icon = Icons.Default.Alarm,
+                    title = "闹钟铃声",
+                    value = com.countdown.app.util.RingtoneManager.getCurrentRingtoneName(context),
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    clickable = true,
+                    onClick = onOpenRingtoneSettings
+                )
+            }
 
             // 旧版简单权限警告（保留作为兜底）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AlarmScheduler.canScheduleExactAlarms(context)) {
@@ -407,26 +454,12 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 编辑设置按钮
-            val editButtonInteractionSource = remember { MutableInteractionSource() }
-            val editButtonPressed by editButtonInteractionSource.collectIsPressedAsState()
-            val editButtonScale by animateFloatAsState(
-                targetValue = if (editButtonPressed) 0.96f else 1f,
-                animationSpec = tween(durationMillis = 150),
-                label = "editButtonScale"
-            )
-
-            Button(
-                onClick = { showSettings = true },
-                interactionSource = editButtonInteractionSource,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .scale(editButtonScale),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("编辑设置", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            AnimatedEntrance(visible = contentVisible, delayMillis = 600) {
+                com.countdown.app.ui.components.BrandButton(
+                    text = "编辑设置",
+                    icon = Icons.Default.Edit,
+                    onClick = { showSettings = true }
+                )
             }
 
             Spacer(modifier = Modifier.height(80.dp))
@@ -546,43 +579,70 @@ fun PermissionWarningCard(
     onClick: () -> Unit,
     missingCount: Int
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "permCardScale"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.material.ripple.rememberRipple(),
+                onClick = onClick
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        ),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 1.dp
+        )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = Color(0xFFE65100),
-                modifier = Modifier.size(28.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "权限缺失提醒",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE65100),
-                    fontSize = 15.sp
+                    color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
-                    text = "有 $missingCount 项关键权限未开启，提醒功能可能无法正常工作，点击前往权限中心",
-                    color = Color(0xFFBF360C),
-                    fontSize = 13.sp,
+                    text = "有 $missingCount 项关键权限未开启，提醒功能可能无法正常工作",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
                     lineHeight = 18.sp
                 )
             }
             Icon(
-                imageVector = Icons.Default.Security,
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = Color(0xFFE65100)
+                tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -590,38 +650,71 @@ fun PermissionWarningCard(
 
 @Composable
 fun HuaweiTipCard(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "huaweiCardScale"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-        shape = RoundedCornerShape(16.dp)
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.material.ripple.rememberRipple(),
+                onClick = onClick
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 1.dp
+        )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.NotificationsActive,
-                contentDescription = null,
-                tint = Color(0xFF1565C0),
-                modifier = Modifier.size(28.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "华为设备优化",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1565C0),
-                    fontSize = 15.sp
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Text(
                     text = "检测到华为设备，建议完成专项设置以确保提醒可靠触发",
-                    color = Color(0xFF0D47A1),
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                     lineHeight = 18.sp
                 )
             }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
@@ -650,120 +743,6 @@ fun SimplePermissionCard(text: String, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium
             )
-        }
-    }
-}
-
-@Composable
-fun MainCountdownCard(
-    eventContent: String,
-    daysRemaining: Long,
-    targetReached: Boolean,
-    targetDate: LocalDate
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 20.dp)
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp))
-            .animateContentSize(animationSpec = tween(durationMillis = 300)),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    )
-                )
-                .padding(36.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = eventContent.ifEmpty { "未设置事件" },
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = if (targetReached) "到达" else if (daysRemaining == 0L) "今天" else "$daysRemaining",
-                modifier = Modifier.animateContentSize(animationSpec = tween(durationMillis = 300)),
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 120.sp,
-                lineHeight = 124.sp
-            )
-
-            Text(
-                text = if (targetReached) "" else if (daysRemaining <= 0) "天前" else "天",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "目标日期: ${DateCalculator.formatDate(targetDate)}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
-
-@Composable
-fun InfoCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    value: String,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = valueColor,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
         }
     }
 }

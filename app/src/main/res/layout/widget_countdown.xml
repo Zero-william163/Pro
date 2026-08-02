@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Countdown Widget - Redesigned Layout
+
+    Modern card-style widget with clear visual hierarchy:
+    - Top: Event name
+    - Center: Super-large countdown number (visual focal point)
+    - Bottom: Target date + reminder time
+
+    All text uses color resources for dark mode support.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_container"
     android:layout_width="match_parent"
@@ -8,7 +18,7 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <!-- 顶部：事件名称 -->
+    <!-- ===== Top: Event Name ===== -->
     <TextView
         android:id="@+id/widget_event"
         android:layout_width="wrap_content"
@@ -16,15 +26,16 @@
         android:ellipsize="end"
         android:maxLines="1"
         android:text="事件"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:textColor="@color/widget_text_primary"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.02" />
 
-    <!-- 中间：超大天数数字 + "天"标签，横向排列，底部对齐 -->
+    <!-- ===== Center: Super-large countdown number + unit ===== -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:gravity="bottom"
         android:orientation="horizontal">
 
@@ -33,39 +44,64 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0"
-            android:textColor="#FFFFFF"
-            android:textSize="48sp"
-            android:textStyle="bold" />
+            android:textColor="@color/widget_text_primary"
+            android:textSize="56sp"
+            android:textStyle="bold"
+            android:letterSpacing="-0.03"
+            android:includeFontPadding="false" />
 
         <TextView
             android:id="@+id/widget_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_marginBottom="6dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginBottom="8dp"
             android:text="天"
-            android:textColor="#B3FFFFFF"
-            android:textSize="14sp" />
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- 底部：目标日期 -->
-    <TextView
-        android:id="@+id/widget_target"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+    <!-- ===== Divider ===== -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="1dp"
         android:layout_marginTop="10dp"
-        android:text="目标日期"
-        android:textColor="#B3FFFFFF"
-        android:textSize="11sp" />
+        android:layout_marginBottom="8dp"
+        android:background="#33FFFFFF"
+        android:alpha="0.5" />
 
-    <!-- 底部：提醒时间 -->
-    <TextView
-        android:id="@+id/widget_reminder_time"
+    <!-- ===== Bottom: Target Date + Reminder Time ===== -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="未设置提醒"
-        android:textColor="#B3FFFFFF"
-        android:textSize="11sp" />
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_target"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="目标日期"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:text="·"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_reminder_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="未设置提醒"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+    </LinearLayout>
 
 </LinearLayout>

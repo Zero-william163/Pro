@@ -103,7 +103,8 @@ object PermissionChecker {
         val operationPath: String? = null,   // 手动操作路径（无法直接跳转时显示）
         val iconType: IconType = IconType.GENERAL,  // 图标类型
         val checkable: Boolean = true,       // 是否可通过 API 检测状态（false 表示需用户手动确认）
-        val confirmedByUser: Boolean = false // 用户是否已手动确认开启（仅 checkable=false 时有效）
+        val confirmedByUser: Boolean = false, // 用户是否已手动确认开启（仅 checkable=false 时有效）
+        val guideId: String = ""              // 关联 PermissionGuideData 中的权限 ID，用于显示详细操作路径
     )
 
     enum class IconType {
@@ -597,7 +598,8 @@ object PermissionChecker {
             isCritical = true,
             intentCandidates = intents,
             actionLabel = "立即开启",
-            iconType = IconType.NOTIFICATION
+            iconType = IconType.NOTIFICATION,
+            guideId = "notification_permission"
         )
     }
 
@@ -621,7 +623,8 @@ object PermissionChecker {
             isCritical = true,
             intentCandidates = intents,
             actionLabel = "立即开启",
-            iconType = IconType.ALARM
+            iconType = IconType.ALARM,
+            guideId = "exact_alarm"
         )
     }
 
@@ -648,7 +651,8 @@ object PermissionChecker {
             isCritical = true,
             intentCandidates = intents,
             actionLabel = "立即开启",
-            iconType = IconType.FULL_SCREEN
+            iconType = IconType.FULL_SCREEN,
+            guideId = "full_screen_intent"
         )
     }
 
@@ -675,7 +679,8 @@ object PermissionChecker {
             isCritical = true,
             intentCandidates = intents,
             actionLabel = "立即开启",
-            iconType = IconType.BATTERY
+            iconType = IconType.BATTERY,
+            guideId = "battery_optimization"
         )
     }
 
@@ -704,7 +709,8 @@ object PermissionChecker {
             isCritical = true,
             intentCandidates = intents,
             actionLabel = "立即设置",
-            iconType = IconType.CHANNEL
+            iconType = IconType.CHANNEL,
+            guideId = "alarm_channel"
         )
     }
 
@@ -728,7 +734,8 @@ object PermissionChecker {
             isCritical = false,
             intentCandidates = intents,
             actionLabel = "立即开启",
-            iconType = IconType.OVERLAY
+            iconType = IconType.OVERLAY,
+            guideId = "system_alert_window"
         )
     }
 
@@ -778,7 +785,8 @@ object PermissionChecker {
             vendorName = "华为",
             operationPath = "设置 → 应用 → 应用启动管理 → 找到「目标倒计时」 → 选择「手动管理」 → 开启全部三个开关",
             iconType = IconType.AUTO_START,
-            checkable = false  // 华为未提供公开 API 检测自启动状态
+            checkable = false,  // 华为未提供公开 API 检测自启动状态
+            guideId = "auto_start"
         )
     }
 
@@ -807,7 +815,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "华为",
             operationPath = "设置 → 电池 → 更多电池设置 → 关闭「休眠时始终保持网络连接」→ 应用启动管理 → 手动管理",
-            iconType = IconType.BATTERY
+            iconType = IconType.BATTERY,
+            guideId = "battery_optimization"
         )
     }
 
@@ -834,7 +843,8 @@ object PermissionChecker {
             vendorName = "华为",
             operationPath = "设置 → 应用 → 应用启动管理 → 找到「目标倒计时」 → 手动管理 → 开启「允许后台活动」",
             iconType = IconType.LOCK_SCREEN,
-            checkable = false  // 华为未提供公开 API 检测锁屏清理白名单
+            checkable = false,  // 华为未提供公开 API 检测锁屏清理白名单
+            guideId = "auto_start"
         )
     }
 
@@ -861,7 +871,8 @@ object PermissionChecker {
             vendorName = "小米",
             operationPath = "设置 → 应用设置 → 授权管理 → 自启动管理 → 找到「目标倒计时」 → 开启开关",
             iconType = IconType.AUTO_START,
-            checkable = false  // 小米未提供公开 API 检测自启动状态
+            checkable = false,  // 小米未提供公开 API 检测自启动状态
+            guideId = "auto_start"
         )
     }
 
@@ -890,7 +901,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "小米",
             operationPath = "设置 → 应用设置 → 应用管理 → 找到「目标倒计时」 → 省电策略 → 选择「无限制」",
-            iconType = IconType.BATTERY
+            iconType = IconType.BATTERY,
+            guideId = "battery_optimization"
         )
     }
 
@@ -917,7 +929,8 @@ object PermissionChecker {
             vendorName = if (isOnePlusDevice()) "一加" else "OPPO",
             operationPath = "设置 → 应用管理 → 自启动管理 → 找到「目标倒计时」 → 开启开关",
             iconType = IconType.AUTO_START,
-            checkable = false  // OPPO 未提供公开 API 检测自启动状态
+            checkable = false,  // OPPO 未提供公开 API 检测自启动状态
+            guideId = "auto_start"
         )
     }
 
@@ -944,7 +957,8 @@ object PermissionChecker {
             vendorName = "vivo",
             operationPath = "设置 → 更多设置 → 权限管理 → 后台弹窗 → 找到「目标倒计时」 → 开启开关",
             iconType = IconType.AUTO_START,
-            checkable = false  // vivo 未提供公开 API 检测后台弹窗状态
+            checkable = false,  // vivo 未提供公开 API 检测后台弹窗状态
+            guideId = "auto_start"
         )
     }
 
@@ -973,7 +987,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "三星",
             operationPath = "设置 → 电池和设备维护 → 电池 → 后台使用限制 → 找到「目标倒计时」 → 设为「不受限制」",
-            iconType = IconType.BATTERY
+            iconType = IconType.BATTERY,
+            guideId = "battery_optimization"
         )
     }
 

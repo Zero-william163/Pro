@@ -1,14 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- Brand Primary (Indigo) -->
+    <color name="brand_indigo">#FF4F46E5</color>
+    <color name="brand_indigo_light">#FF818CF8</color>
+    <color name="brand_indigo_dark">#FF3730A3</color>
+
+    <!-- Brand Secondary (Sky) -->
+    <color name="brand_sky">#FF0284C7</color>
+    <color name="brand_sky_light">#FF38BDF8</color>
+
+    <!-- Brand Tertiary (Teal) -->
+    <color name="brand_teal">#FF0D9488</color>
+    <color name="brand_teal_light">#FF2DD4BF</color>
+
+    <!-- Gradient -->
+    <color name="gradient_start">#FF4F46E5</color>
+    <color name="gradient_end">#FF7C3AED</color>
+
+    <!-- Widget gradient (light) -->
+    <color name="widget_gradient_start">#FF4F46E5</color>
+    <color name="widget_gradient_end">#FF0EA5E9</color>
+
+    <!-- Widget text colors (light mode - on gradient background) -->
+    <color name="widget_text_primary">#FFFFFFFF</color>
+    <color name="widget_text_secondary">#B3FFFFFF</color>
+    <color name="widget_text_tertiary">#80FFFFFF</color>
+
+    <!-- Status colors -->
+    <color name="status_green">#FF22C55E</color>
+    <color name="status_green_bg">#FFF0FDF4</color>
+    <color name="status_orange">#FFF97316</color>
+    <color name="status_orange_bg">#FFFFF7ED</color>
+    <color name="status_red">#FFEF4444</color>
+    <color name="status_red_bg">#FFFEF2F2</color>
+    <color name="status_blue">#FF3B82F6</color>
+    <color name="status_blue_bg">#FFEFF6FF</color>
+
+    <!-- Surface colors -->
+    <color name="surface_light">#FFFFFFFF</color>
+    <color name="surface_dark">#FF1A1A22</color>
+    <color name="background_light">#FFFAFAFF</color>
+    <color name="background_dark">#FF0F0F14</color>
+
+    <!-- Standard -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="primary_light">#FF6750A4</color>
-    <color name="primary_dark">#FFD0BCFF</color>
-    <color name="surface_light">#FFFEF7FF</color>
-    <color name="surface_dark">#FF141218</color>
 </resources>

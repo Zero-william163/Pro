@@ -28,6 +28,10 @@ class CountdownRepository private constructor(private val context: Context) {
     private val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
     private val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
     private val THEME_MODE = intPreferencesKey("theme_mode")
+    // 铃声设置
+    private val RINGTONE_TYPE = intPreferencesKey("ringtone_type")
+    private val RINGTONE_URI = stringPreferencesKey("ringtone_uri")
+    private val RINGTONE_NAME = stringPreferencesKey("ringtone_name")
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -38,7 +42,10 @@ class CountdownRepository private constructor(private val context: Context) {
             reminderTimeHour = prefs[REMINDER_HOUR] ?: 8,
             reminderTimeMinute = prefs[REMINDER_MINUTE] ?: 0,
             reminderEnabled = prefs[REMINDER_ENABLED] ?: false,
-            themeMode = prefs[THEME_MODE] ?: 0
+            themeMode = prefs[THEME_MODE] ?: 0,
+            ringtoneType = prefs[RINGTONE_TYPE] ?: CountdownData.RINGTYPE_DEFAULT,
+            ringtoneUri = prefs[RINGTONE_URI] ?: "",
+            ringtoneName = prefs[RINGTONE_NAME] ?: "系统默认闹钟铃声"
         )
     }
 
@@ -54,6 +61,17 @@ class CountdownRepository private constructor(private val context: Context) {
             prefs[REMINDER_MINUTE] = data.reminderTimeMinute
             prefs[REMINDER_ENABLED] = data.reminderEnabled
             prefs[THEME_MODE] = data.themeMode
+            prefs[RINGTONE_TYPE] = data.ringtoneType
+            prefs[RINGTONE_URI] = data.ringtoneUri
+            prefs[RINGTONE_NAME] = data.ringtoneName
+        }
+    }
+
+    suspend fun saveRingtone(type: Int, uri: String, name: String) {
+        dataStore.edit { prefs ->
+            prefs[RINGTONE_TYPE] = type
+            prefs[RINGTONE_URI] = uri
+            prefs[RINGTONE_NAME] = name
         }
     }
 
