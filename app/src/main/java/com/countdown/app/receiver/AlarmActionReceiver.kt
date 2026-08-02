@@ -44,14 +44,14 @@ class AlarmActionReceiver : BroadcastReceiver() {
     private fun handleDismiss(context: Context) {
         Log.d(TAG, "Dismiss alarm requested from notification action")
 
-        // 1. 停止 AlarmService
+        // 1. 停止 AlarmService（声音 + 震动 + 前台服务）
         val stopIntent = Intent(context, AlarmService::class.java).apply {
             action = AlarmService.ACTION_STOP_ALARM
         }
         ContextCompat.startForegroundService(context, stopIntent)
 
-        // 2. 取消通知
-        NotificationHelper.cancelAlarmNotification(context)
+        // 2. 取消所有闹钟相关通知（闹钟通知 + 诊断通知）
+        NotificationHelper.cancelAllAlarmNotifications(context)
 
         // 3. 发送广播关闭 AlarmActivity
         val closeActivityIntent = Intent(AlarmService.ACTION_CLOSE_ALARM_ACTIVITY)

@@ -71,6 +71,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -213,19 +214,6 @@ fun MainScreen(
     val countdownData by repository.countdownDataFlow.collectAsState(initial = CountdownData())
     var currentTime by remember { mutableStateOf(DateCalculator.formatCurrentTime()) }
 
-    // 更新当前时间每秒
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = DateCalculator.formatCurrentTime()
-            delay(1000)
-        }
-    }
-
-    var showSettings by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var showWidgetPrompt by remember { mutableStateOf(false) }
-
     // 权限检测结果（用于显示顶部提示）
     var permissionResult by remember {
         mutableStateOf(PermissionChecker.checkAllPermissions(context))
@@ -234,6 +222,46 @@ fun MainScreen(
     // 重新检测权限
     fun refreshPermissions() {
         permissionResult = PermissionChecker.checkAllPermissions(context)
+    }
+
+    // 更新当前时间每秒
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = DateCalculator.formatCurrentTime()
+            delay(1000)
+        }
+    }
+
+    // 从设置页面返回时自动刷新权限状态
+    val mainLifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(mainLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshPermissions()
+            }
+        }
+        mainLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            mainLifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    var showSettings by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var showWidgetPrompt by remember { mutableStateOf(false) }
+
+    // ===== 启动时检测桌面小组件（真实检测，不使用 SharedPreferences） =====
+    // 仅在应用启动时检测一次：如果桌面没有小组件且提醒已启用，才提示用户添加
+    LaunchedEffect(Unit) {
+        if (countdownData.reminderEnabled) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, CountdownWidgetReceiver::class.java)
+            val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
+            if (widgetIds.isEmpty()) {
+                showWidgetPrompt = true
+            }
+        }
     }
 
     val daysRemaining = DateCalculator.daysRemaining(countdownData.targetDate)
@@ -425,7 +453,13 @@ fun MainScreen(
                 }
                 showSettings = false
                 if (newData.reminderEnabled) {
-                    showWidgetPrompt = true
+                    // 真实检测桌面是否已有小组件，避免重复提示
+                    val appWidgetManager = AppWidgetManager.getInstance(context)
+                    val componentName = ComponentName(context, CountdownWidgetReceiver::class.java)
+                    val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
+                    if (widgetIds.isEmpty()) {
+                        showWidgetPrompt = true
+                    }
                 }
             }
         )

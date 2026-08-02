@@ -261,6 +261,85 @@ object NotificationHelper {
         notificationManager.notify(NOTIFICATION_ID_SNOOZE, builder.build())
     }
 
+    // ==================== 诊断通知（FullScreenIntent 失败时显示给用户） ====================
+
+    const val NOTIFICATION_ID_DIAGNOSTIC = 2002
+
+    /**
+     * 构建诊断通知：当 FullScreenIntent 失败时，告诉用户原因和解决方案
+     *
+     * @param reasons 失败原因列表
+     * @param missingPermissions 缺失的权限名称列表
+     */
+    fun showDiagnosticNotification(
+        context: Context,
+        reasons: List<String>,
+        missingPermissions: List<String>
+    ) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // 点击跳转到权限中心
+        val permissionIntent = Intent(context, com.countdown.app.ui.permission.PermissionActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, 10, permissionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = if (missingPermissions.isNotEmpty()) {
+            "全屏闹钟可能无法弹出：缺少 ${missingPermissions.size} 项权限"
+        } else {
+            "全屏闹钟弹出受限"
+        }
+
+        val body = buildString {
+            reasons.forEachIndexed { index, reason ->
+                append("${index + 1}. $reason\n")
+            }
+            append("\n点击此处前往权限中心开启")
+        }
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID_REMINDER)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(title)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentText(title)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        notificationManager.notify(NOTIFICATION_ID_DIAGNOSTIC, builder.build())
+    }
+
+    /**
+     * 取消诊断通知
+     */
+    fun cancelDiagnosticNotification(context: Context) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID_DIAGNOSTIC)
+    }
+
+    // =================构建停止用最小通知（满足 startForegroundService 要求） ====================
+
+    /**
+     * 构建用于 STOP 操作的最小通知
+     *
+     * 当通过 startForegroundService 发送 STOP 时，
+     * Android 8+ 要求必须调用 startForeground。
+     * 使用最小化通知避免闪烁和资源浪费。
+     */
+    fun buildStopNotification(context: Context): Notification {
+        return NotificationCompat.Builder(context, CHANNEL_ID_SNOOZE)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("闹钟已关闭")
+            .setContentText("")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(false)
+            .build()
+    }
+
     // ==================== 取消通知 ====================
 
     /**
@@ -269,6 +348,15 @@ object NotificationHelper {
     fun cancelAlarmNotification(context: Context) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(ALARM_NOTIFICATION_ID)
+    }
+
+    /**
+     * 取消所有闹钟相关通知
+     */
+    fun cancelAllAlarmNotifications(context: Context) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(ALARM_NOTIFICATION_ID)
+        notificationManager.cancel(NOTIFICATION_ID_DIAGNOSTIC)
     }
 
     fun cancelAllNotifications(context: Context) {

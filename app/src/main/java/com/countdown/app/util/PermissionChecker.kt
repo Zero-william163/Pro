@@ -39,6 +39,50 @@ object PermissionChecker {
 
     private const val TAG = "PermissionChecker"
 
+    // ==================== 权限确认存储（厂商权限用户手动确认） ====================
+
+    /**
+     * 厂商特殊权限的用户确认状态存储
+     *
+     * 由于华为/小米/OPPO/vivo 等厂商的自启动、后台管理等权限无法通过 Android API 检测，
+     * 当用户按照引导开启后，由用户手动确认，存储确认状态。
+     * 这不是"是否提示过"的记录，而是"用户确认已开启"的状态。
+     */
+    private object PermissionConfirmationStore {
+        private const val PREFS_NAME = "permission_confirmations"
+        private const val KEY_PREFIX = "confirmed_"
+
+        fun isConfirmed(context: Context, permissionId: String): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getBoolean(KEY_PREFIX + permissionId, false)
+        }
+
+        fun setConfirmed(context: Context, permissionId: String, confirmed: Boolean) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(KEY_PREFIX + permissionId, confirmed).apply()
+            Log.d(TAG, "Permission $permissionId confirmation set to: $confirmed")
+        }
+
+        fun clearAll(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().clear().apply()
+        }
+    }
+
+    /**
+     * 检查厂商权限是否已被用户确认
+     */
+    fun isPermissionConfirmed(context: Context, permissionId: String): Boolean {
+        return PermissionConfirmationStore.isConfirmed(context, permissionId)
+    }
+
+    /**
+     * 设置厂商权限的用户确认状态
+     */
+    fun setPermissionConfirmed(context: Context, permissionId: String, confirmed: Boolean) {
+        PermissionConfirmationStore.setConfirmed(context, permissionId, confirmed)
+    }
+
     // ==================== 权限数据模型 ====================
 
     /**
@@ -57,7 +101,9 @@ object PermissionChecker {
         val vendorSpecial: Boolean = false,  // 是否为厂商专项权限
         val vendorName: String = "",         // 厂商名称（华为/小米等）
         val operationPath: String? = null,   // 手动操作路径（无法直接跳转时显示）
-        val iconType: IconType = IconType.GENERAL  // 图标类型
+        val iconType: IconType = IconType.GENERAL,  // 图标类型
+        val checkable: Boolean = true,       // 是否可通过 API 检测状态（false 表示需用户手动确认）
+        val confirmedByUser: Boolean = false // 用户是否已手动确认开启（仅 checkable=false 时有效）
     )
 
     enum class IconType {
@@ -498,16 +544,31 @@ object PermissionChecker {
             items.add(buildSamsungBattery(context))
         }
 
+        // ========== 应用用户确认状态（厂商权限） ==========
+        // 对于无法通过 API 检测的厂商权限，检查用户是否已手动确认
+        val finalItems = items.map { item ->
+            if (!item.checkable) {
+                val confirmed = PermissionConfirmationStore.isConfirmed(context, item.id)
+                if (confirmed) {
+                    item.copy(isGranted = true, confirmedByUser = true)
+                } else {
+                    item
+                }
+            } else {
+                item
+            }
+        }
+
         // 计算结果
-        val criticalItems = items.filter { it.isCritical }
+        val criticalItems = finalItems.filter { it.isCritical }
         val criticalGranted = criticalItems.all { it.isGranted }
-        val allGranted = items.all { it.isGranted }
+        val allGranted = finalItems.all { it.isGranted }
         val missingCriticalCount = criticalItems.count { !it.isGranted }
 
         return PermissionResult(
             allGranted = allGranted,
             criticalGranted = criticalGranted,
-            items = items,
+            items = finalItems,
             isHuaweiDevice = isHuaweiDevice(),
             deviceBrand = getDeviceBrand(),
             missingCriticalCount = missingCriticalCount
@@ -716,7 +777,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "华为",
             operationPath = "设置 → 应用 → 应用启动管理 → 找到「目标倒计时」 → 选择「手动管理」 → 开启全部三个开关",
-            iconType = IconType.AUTO_START
+            iconType = IconType.AUTO_START,
+            checkable = false  // 华为未提供公开 API 检测自启动状态
         )
     }
 
@@ -771,7 +833,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "华为",
             operationPath = "设置 → 应用 → 应用启动管理 → 找到「目标倒计时」 → 手动管理 → 开启「允许后台活动」",
-            iconType = IconType.LOCK_SCREEN
+            iconType = IconType.LOCK_SCREEN,
+            checkable = false  // 华为未提供公开 API 检测锁屏清理白名单
         )
     }
 
@@ -797,7 +860,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "小米",
             operationPath = "设置 → 应用设置 → 授权管理 → 自启动管理 → 找到「目标倒计时」 → 开启开关",
-            iconType = IconType.AUTO_START
+            iconType = IconType.AUTO_START,
+            checkable = false  // 小米未提供公开 API 检测自启动状态
         )
     }
 
@@ -852,7 +916,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = if (isOnePlusDevice()) "一加" else "OPPO",
             operationPath = "设置 → 应用管理 → 自启动管理 → 找到「目标倒计时」 → 开启开关",
-            iconType = IconType.AUTO_START
+            iconType = IconType.AUTO_START,
+            checkable = false  // OPPO 未提供公开 API 检测自启动状态
         )
     }
 
@@ -878,7 +943,8 @@ object PermissionChecker {
             vendorSpecial = true,
             vendorName = "vivo",
             operationPath = "设置 → 更多设置 → 权限管理 → 后台弹窗 → 找到「目标倒计时」 → 开启开关",
-            iconType = IconType.AUTO_START
+            iconType = IconType.AUTO_START,
+            checkable = false  // vivo 未提供公开 API 检测后台弹窗状态
         )
     }
 

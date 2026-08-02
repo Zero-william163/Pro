@@ -143,6 +143,10 @@ private val RedBgColor = Color(0xFFFFEBEE)
 private val OrangeColor = Color(0xFFFF9800)
 private val OrangeBgColor = Color(0xFFFFF3E0)
 
+/** 待确认（无法通过 API 检测的厂商权限）- 蓝色 */
+private val BlueColor = Color(0xFF2196F3)
+private val BlueBgColor = Color(0xFFE3F2FD)
+
 // ==================== 主屏幕 ====================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -159,6 +163,9 @@ fun PermissionScreen(onBack: () -> Unit) {
 
     // 跳转失败的对话框状态
     var failedItem by remember { mutableStateOf<PermissionChecker.PermissionItem?>(null) }
+
+    // 用户确认对话框状态（厂商权限「我已开启」）
+    var confirmItem by remember { mutableStateOf<PermissionChecker.PermissionItem?>(null) }
 
     // Snackbar 消息
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -195,6 +202,20 @@ fun PermissionScreen(onBack: () -> Unit) {
             title = item.title,
             operationPath = item.operationPath ?: "请前往系统设置手动开启此权限",
             onDismiss = { failedItem = null }
+        )
+    }
+
+    // 用户确认对话框（厂商权限「我已开启」）
+    confirmItem?.let { item ->
+        ConfirmPermissionDialog(
+            title = item.title,
+            onConfirm = {
+                PermissionChecker.setPermissionConfirmed(context, item.id, true)
+                refreshPermissions()
+                snackbarMessage = "${item.title} 已标记为已开启"
+                confirmItem = null
+            },
+            onDismiss = { confirmItem = null }
         )
     }
 
@@ -332,6 +353,14 @@ fun PermissionScreen(onBack: () -> Unit) {
                                     failedItem = item
                                 }
                             }
+                        },
+                        onConfirmClick = {
+                            confirmItem = item
+                        },
+                        onResetConfirm = {
+                            PermissionChecker.setPermissionConfirmed(context, item.id, false)
+                            refreshPermissions()
+                            snackbarMessage = "${item.title} 已重置，请重新确认"
                         },
                         delayMillis = (criticalItems.size + recommendedItems.size + index) * 80
                     )
@@ -477,6 +506,8 @@ fun VendorSectionHeader(vendorName: String, vendorItemCount: Int) {
 fun PermissionCard(
     item: PermissionChecker.PermissionItem,
     onActionClick: () -> Unit,
+    onConfirmClick: () -> Unit = {},
+    onResetConfirm: () -> Unit = {},
     delayMillis: Int
 ) {
     var visible by remember { mutableStateOf(false) }
@@ -489,28 +520,43 @@ fun PermissionCard(
         visible = visible,
         enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 }
     ) {
-        PermissionCardContent(item = item, onActionClick = onActionClick)
+        PermissionCardContent(
+            item = item,
+            onActionClick = onActionClick,
+            onConfirmClick = onConfirmClick,
+            onResetConfirm = onResetConfirm
+        )
     }
 }
 
 @Composable
 fun PermissionCardContent(
     item: PermissionChecker.PermissionItem,
-    onActionClick: () -> Unit
+    onActionClick: () -> Unit,
+    onConfirmClick: () -> Unit = {},
+    onResetConfirm: () -> Unit = {}
 ) {
     // 状态颜色
+    // 绿色 = 已开启（API 检测）或 已确认（用户手动确认）
+    // 红色 = 未开启 + 关键权限
+    // 橙色 = 未开启 + 非关键权限（建议开启）
+    // 蓝色 = 无法通过 API 检测且未确认（待用户手动确认）
     val statusColor = when {
         item.isGranted -> GreenColor
+        !item.checkable -> BlueColor
         item.isCritical -> RedColor
         else -> OrangeColor
     }
     val statusBgColor = when {
         item.isGranted -> GreenBgColor
+        !item.checkable -> BlueBgColor
         item.isCritical -> RedBgColor
         else -> OrangeBgColor
     }
     val statusText = when {
+        item.isGranted && item.confirmedByUser -> "已确认"
         item.isGranted -> "已开启"
+        !item.checkable -> "待确认"
         item.isCritical -> "未开启"
         else -> "建议开启"
     }
@@ -597,19 +643,72 @@ fun PermissionCardContent(
 
                 // 右侧：状态标签或立即开启按钮
                 if (item.isGranted) {
-                    // 已开启：显示绿色状态标签
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(GreenBgColor)
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    // 已开启/已确认：显示绿色状态标签
+                    Column(
+                        horizontalAlignment = Alignment.End
                     ) {
-                        Text(
-                            text = statusText,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = GreenColor
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GreenBgColor)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = statusText,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GreenColor
+                            )
+                        }
+                        // 用户确认的权限可以重新检测
+                        if (item.confirmedByUser) {
+                            TextButton(
+                                onClick = onResetConfirm,
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 4.dp, vertical = 0.dp
+                                )
+                            ) {
+                                Text("重新检测", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                } else if (!item.checkable) {
+                    // 待确认（厂商权限）：显示"前往设置"按钮 + "我已开启"按钮
+                    Column(
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Button(
+                            onClick = onActionClick,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 14.dp,
+                                vertical = 6.dp
+                            ),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BlueColor,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = item.actionLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        TextButton(
+                            onClick = onConfirmClick,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 4.dp, vertical = 0.dp
+                            )
+                        ) {
+                            Text("我已开启", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
                     }
                 } else {
                     // 未开启：显示立即开启按钮
@@ -621,7 +720,10 @@ fun PermissionCardContent(
                             vertical = 6.dp
                         ),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (item.isCritical) RedColor else OrangeColor,
+                            containerColor = when {
+                                item.isCritical -> RedColor
+                                else -> OrangeColor
+                            },
                             contentColor = Color.White
                         )
                     ) {
@@ -658,14 +760,14 @@ fun PermissionCardContent(
                 content = item.solveProblem
             )
 
-            // ===== 手动操作路径（厂商专项权限且未开启时显示）=====
+            // ===== 手动操作路径（厂商专项权限且未确认时显示）=====
             if (item.vendorSpecial && !item.isGranted && item.operationPath != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFFFF8E1))
+                        .background(if (!item.checkable) BlueBgColor else Color(0xFFFFF8E1))
                         .padding(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.Top) {
@@ -825,4 +927,56 @@ fun OutlinedRefreshButton(onClick: () -> Unit) {
         Spacer(modifier = Modifier.width(8.dp))
         Text("重新检测权限状态")
     }
+}
+
+// ==================== 用户确认对话框（厂商权限） ====================
+
+@Composable
+fun ConfirmPermissionDialog(
+    title: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = GreenColor
+            )
+        },
+        title = {
+            Text(
+                text = "确认「$title」已开启",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text(
+                text = "您是否已在系统设置中开启「$title」？\n\n" +
+                        "由于该权限为厂商特殊权限，无法通过系统 API 自动检测。\n" +
+                        "确认后将标记为已开启。如需重新检测，可点击「重新检测」按钮。",
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GreenColor,
+                    contentColor = Color.White
+                )
+            ) {
+                Text("已开启", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("未开启")
+            }
+        }
+    )
 }

@@ -97,6 +97,9 @@ class AlarmActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "AlarmActivity onCreate")
 
+        // ===== 0. 通知 AlarmService：Activity 已启动（阻止回退机制重复启动）=====
+        AlarmService.isAlarmActivityActive = true
+
         // ===== 1. 窗口属性设置 =====
         setupWindowFlags()
 
@@ -187,8 +190,8 @@ class AlarmActivity : ComponentActivity() {
         }
         ContextCompat.startForegroundService(this, stopIntent)
 
-        // 2. 取消通知
-        NotificationHelper.cancelAlarmNotification(this)
+        // 2. 取消所有闹钟相关通知
+        NotificationHelper.cancelAllAlarmNotifications(this)
 
         // 3. 关闭当前 Activity
         finishAndRemoveTask()
@@ -220,6 +223,8 @@ class AlarmActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "AlarmActivity onDestroy")
+        // 通知 AlarmService：Activity 已关闭
+        AlarmService.isAlarmActivityActive = false
         closeReceiver?.let { unregisterReceiver(it) }
     }
 

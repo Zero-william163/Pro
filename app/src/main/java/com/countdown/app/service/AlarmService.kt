@@ -14,39 +14,35 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.WindowManager
 import com.countdown.app.util.NotificationHelper
+import com.countdown.app.util.PermissionChecker
 
 /**
- * 闹钟前台服务（重构 v3）
+ * 闹钟前台服务（重构 v4）
  *
- * 核心设计原则（遵循 Android 官方最佳实践）：
+ * 核心修复：
+ * 1. WakeLock 时序修复：先发布通知（触发 FullScreenIntent），再唤醒屏幕
+ *    - 之前 ACQUIRE_CAUSES_WAKEUP 在 onCreate 提前唤醒屏幕
+ *    - 导致通知发布时屏幕已亮，FullScreenIntent 被降级为 Heads-up
+ *    - 修复：先 PARTIAL_WAKE_LOCK 保持 CPU，通知发布后再唤醒屏幕
  *
- * 1. 【单一通知原则】前台服务通知 = 唯一的闹钟通知，不再创建第二个通知
- *    - 之前创建两个通知（前台通知 + showAlarmNotification），两个都有 FullScreenIntent
- *    - 系统遇到多个 FullScreenIntent 时会冲突，导致全屏界面无法弹出
+ * 2. 停止服务崩溃修复：STOP_ALARM 时先 startForeground 再 stopForeground
+ *    - 之前 startForegroundService 发送 STOP 后直接 stopForeground
+ *    - Android 8+ 要求 startForegroundService 后必须调用 startForeground
+ *    - 修复：STOP 时也先调用 startForeground，再停止
  *
- * 2. 【FullScreenIntent 自行处理】不手动 startActivity 启动 AlarmActivity
- *    - Android 官方文档：setFullScreenIntent() 在锁屏时会自动启动全屏 Activity
- *    - 手动 startActivity 会与 FullScreenIntent 冲突，导致行为不确定
- *    - 非锁屏时，FullScreenIntent 降级为 Heads-up Notification（正确行为）
- *
- * 3. 【声音/震动由 Service 直接控制】通知渠道不设声音和震动
- *    - 避免 MediaPlayer 声音 + 渠道声音 = 双重声音
- *    - MediaPlayer 使用 USAGE_ALARM 属性，系统级闹钟体验
- *
- * 4. 【可靠资源清理】关闭时释放所有资源
- *    - MediaPlayer.release()
- *    - Vibrator.cancel()
- *    - WakeLock.release()
- *    - AudioFocus.abandon()
- *    - Notification.cancel()
- *    - stopForeground() + stopSelf()
+ * 3. FullScreenIntent 回退机制：2 秒后检测 Activity 是否启动
+ *    - 如果 FullScreenIntent 未触发（厂商限制等），手动启动 AlarmActivity
+ *    - 添加详细诊断日志分析失败原因
  */
 class AlarmService : Service() {
 
@@ -62,34 +58,46 @@ class AlarmService : Service() {
         const val EXTRA_TARGET_REACHED = "target_reached"
 
         // 震动波形: [等待, 震动, 暂停, 震动, 暂停, 震动] (ms)
-        // repeat = 0 表示从索引0开始无限循环
         private val VIBRATION_PATTERN = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+
+        // FullScreenIntent 回退检测延迟（1.5秒，平衡响应速度和 FullScreenIntent 触发时间）
+        private const val FULLSCREEN_FALLBACK_DELAY_MS = 1500L
+
+        // AlarmActivity 是否已启动的标志（由 AlarmActivity 设置）
+        @Volatile
+        @JvmStatic
+        var isAlarmActivityActive = false
     }
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var screenWakeLock: PowerManager.WakeLock? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
-    private var closeReceiver: BroadcastReceiver? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "AlarmService onCreate")
-        acquireWakeLock()
-        registerCloseReceiver()
+        // 安全网：确保通知渠道已创建（防止 Application 未初始化或被系统杀死后重建）
+        NotificationHelper.createNotificationChannels(this)
+        // 只获取 PARTIAL_WAKE_LOCK 保持 CPU 运行，不提前唤醒屏幕
+        acquirePartialWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             null -> {
-                // 系统杀死后重启服务，但没有数据，直接停止
                 Log.w(TAG, "Service restarted without intent, stopping")
                 stopAlarmAndCleanup()
                 return START_NOT_STICKY
             }
             ACTION_STOP_ALARM -> {
                 Log.d(TAG, "Received STOP_ALARM action")
+                // 【关键修复】startForegroundService 必须先调用 startForeground
+                // 否则 Android 8+ 会抛出 ForegroundServiceDidNotStartInTimeException
+                startForegroundCompatForStop()
                 stopAlarmAndCleanup()
                 return START_NOT_STICKY
             }
@@ -98,35 +106,276 @@ class AlarmService : Service() {
                 val daysRemaining = intent.getLongExtra(EXTRA_DAYS_REMAINING, 0)
                 val targetReached = intent.getBooleanExtra(EXTRA_TARGET_REACHED, false)
 
-                Log.d(TAG, "Starting alarm: event=$eventContent, days=$daysRemaining, reached=$targetReached")
+                Log.i(TAG, "=== 开始闹钟触发 ===")
+                Log.i(TAG, "事件: $eventContent, 剩余天数: $daysRemaining, 已到达: $targetReached")
+                Log.i(TAG, "设备品牌: ${PermissionChecker.getDeviceBrand()}")
+                Log.i(TAG, "Android 版本: ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})")
 
-                // 【关键】使用 NotificationHelper 构建唯一的通知
-                // 此通知同时用作：
-                // - 前台服务通知（startForeground）
-                // - FullScreenIntent 载体（锁屏时自动弹出全屏界面）
-                // - 通知操作按钮（关闭/稍后提醒）
+                // 诊断：全面分析 FullScreenIntent 相关权限和状态
+                val diag = analyzeFullScreenIntent()
+                logDiagnostics(diag)
+
+                // 重置 Activity 标志
+                isAlarmActivityActive = false
+
+                // 构建通知（包含 FullScreenIntent）
                 val notification = NotificationHelper.buildAlarmNotification(
                     this,
                     eventContent,
                     daysRemaining,
                     targetReached
                 )
-                startForegroundCompat(notification)
 
-                // 播放声音（MediaPlayer + 音频焦点）
+                // 先调用 startForeground 发布通知
+                startForegroundCompat(notification)
+                Log.i(TAG, "前台服务通知已发布，FullScreenIntent 已附加")
+
+                // 播放声音
                 startSoundWithAudioFocus()
 
                 // 开始震动
                 startVibration()
 
-                // 【关键】不手动启动 AlarmActivity！
-                // FullScreenIntent 会自动处理：
-                // - 锁屏时：直接启动全屏 AlarmActivity
-                // - 非锁屏时：显示 Heads-up Notification（横幅通知）
-                // 手动 startActivity 会与 FullScreenIntent 冲突，导致系统不确定行为
+                // 延迟唤醒屏幕（让 FullScreenIntent 先尝试触发）
+                handler.postDelayed({
+                    acquireScreenWakeLock()
+                }, 500)
+
+                // FullScreenIntent 回退机制：1.5秒后检测 Activity 是否启动
+                handler.postDelayed({
+                    if (!isAlarmActivityActive) {
+                        Log.w(TAG, "=== FullScreenIntent 未触发，启动回退机制 ===")
+                        startAlarmActivityFallback(eventContent, daysRemaining, targetReached, diag)
+                    } else {
+                        Log.i(TAG, "AlarmActivity 已通过 FullScreenIntent 启动")
+                    }
+                }, FULLSCREEN_FALLBACK_DELAY_MS)
             }
         }
         return START_STICKY
+    }
+
+    // ==================== FullScreenIntent 全面诊断分析 ====================
+
+    /**
+     * 诊断结果数据类
+     */
+    data class DiagnosticResult(
+        val notificationEnabled: Boolean,
+        val channelExists: Boolean,
+        val channelImportance: Int,
+        val channelImportanceSufficient: Boolean,
+        val canUseFullScreenIntent: Boolean,
+        val canScheduleExactAlarms: Boolean,
+        val isIgnoringBatteryOptimizations: Boolean,
+        val isScreenOn: Boolean,
+        val isLocked: Boolean,
+        val expectedBehavior: String,
+        val failureReasons: List<String>,
+        val missingPermissions: List<String>
+    )
+
+    /**
+     * 全面分析 FullScreenIntent 是否能成功触发
+     * 返回诊断结果，包含失败原因和缺失权限
+     */
+    private fun analyzeFullScreenIntent(): DiagnosticResult {
+        val reasons = mutableListOf<String>()
+        val missingPerms = mutableListOf<String>()
+
+        // 1. 通知权限
+        val notifEnabled = NotificationHelper.areNotificationsEnabled(this)
+        if (!notifEnabled) {
+            reasons.add("通知权限未开启：系统将拦截所有通知，FullScreenIntent 无法触发")
+            missingPerms.add("通知权限")
+        }
+
+        // 2. 通知渠道
+        var channelExists = false
+        var channelImportance = 0
+        var channelImportanceSufficient = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = nm.getNotificationChannel(NotificationHelper.CHANNEL_ID_ALARM)
+            channelExists = channel != null
+            if (channel != null) {
+                channelImportance = channel.importance
+                channelImportanceSufficient = channel.importance >= NotificationManager.IMPORTANCE_HIGH
+                if (!channelImportanceSufficient) {
+                    reasons.add("闹钟通知渠道优先级不足：当前=${channel.importance}，需要 IMPORTANCE_HIGH(${NotificationManager.IMPORTANCE_HIGH})")
+                }
+                if (channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                    reasons.add("闹钟通知渠道被用户完全关闭")
+                    missingPerms.add("闹钟通知渠道")
+                }
+            } else {
+                reasons.add("闹钟通知渠道不存在：通知将无法显示")
+            }
+        } else {
+            channelExists = true
+            channelImportanceSufficient = true
+        }
+
+        // 3. 全屏通知权限 (Android 14+)
+        var canUseFSI = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            canUseFSI = nm.canUseFullScreenIntent()
+            if (!canUseFSI) {
+                reasons.add("USE_FULL_SCREEN_INTENT 权限未授予（Android 14+ 要求）：系统将忽略 FullScreenIntent")
+                missingPerms.add("全屏通知权限")
+            }
+        }
+
+        // 4. 精确闹钟权限
+        var canSchedule = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            canSchedule = am.canScheduleExactAlarms()
+            if (!canSchedule) {
+                reasons.add("精确闹钟权限未授予：闹钟可能延迟触发")
+                missingPerms.add("精确闹钟权限")
+            }
+        }
+
+        // 5. 电池优化
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val ignoringBattery = pm.isIgnoringBatteryOptimizations(packageName)
+        if (!ignoringBattery) {
+            reasons.add("未忽略电池优化：系统可能在后台杀死应用，导致闹钟不触发")
+            missingPerms.add("忽略电池优化")
+        }
+
+        // 6. 屏幕和锁屏状态
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val isLocked = km.isKeyguardLocked
+        val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            pm.isInteractive
+        } else {
+            @Suppress("DEPRECATION")
+            pm.isScreenOn
+        }
+
+        val expectedBehavior = when {
+            !notifEnabled -> "完全阻止（通知权限关闭）"
+            !channelExists -> "完全阻止（渠道不存在）"
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !canUseFSI -> "降级为横幅通知（缺少全屏权限）"
+            isScreenOn && !isLocked -> "降级为 Heads-up 横幅通知（屏幕亮且未锁屏，属正常行为）"
+            else -> "应触发全屏界面"
+        }
+
+        // 7. 厂商限制提示
+        val brand = PermissionChecker.getDeviceBrand()
+        if (brand == "华为" || brand == "荣耀") {
+            if (!PermissionChecker.isIgnoringBatteryOptimizations(this)) {
+                reasons.add("华为/荣耀设备限制：建议在「应用启动管理」中允许自启动和后台活动")
+            }
+        } else if (brand == "小米" || brand == "红米") {
+            reasons.add("小米/红米设备限制：建议在「自启动管理」中允许自启动")
+        }
+
+        return DiagnosticResult(
+            notificationEnabled = notifEnabled,
+            channelExists = channelExists,
+            channelImportance = channelImportance,
+            channelImportanceSufficient = channelImportanceSufficient,
+            canUseFullScreenIntent = canUseFSI,
+            canScheduleExactAlarms = canSchedule,
+            isIgnoringBatteryOptimizations = ignoringBattery,
+            isScreenOn = isScreenOn,
+            isLocked = isLocked,
+            expectedBehavior = expectedBehavior,
+            failureReasons = reasons,
+            missingPermissions = missingPerms
+        )
+    }
+
+    /**
+     * 输出诊断日志（详细分析）
+     */
+    private fun logDiagnostics(diag: DiagnosticResult) {
+        Log.i(TAG, "========== FullScreenIntent 诊断分析 ==========")
+        Log.i(TAG, "设备品牌: ${PermissionChecker.getDeviceBrand()}")
+        Log.i(TAG, "Android 版本: ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})")
+        Log.i(TAG, "--- 权限状态 ---")
+        Log.i(TAG, "  通知权限: ${if (diag.notificationEnabled) "已开启" else "未开启"}")
+        Log.i(TAG, "  闹钟渠道存在: ${diag.channelExists}")
+        Log.i(TAG, "  渠道优先级: ${diag.channelImportance} (需要 >= ${NotificationManager.IMPORTANCE_HIGH})")
+        Log.i(TAG, "  渠道优先级充足: ${diag.channelImportanceSufficient}")
+        Log.i(TAG, "  全屏通知权限: ${if (diag.canUseFullScreenIntent) "已开启" else "未开启"}")
+        Log.i(TAG, "  精确闹钟权限: ${if (diag.canScheduleExactAlarms) "已开启" else "未开启"}")
+        Log.i(TAG, "  忽略电池优化: ${if (diag.isIgnoringBatteryOptimizations) "已开启" else "未开启"}")
+        Log.i(TAG, "--- 屏幕状态 ---")
+        Log.i(TAG, "  屏幕状态: ${if (diag.isScreenOn) "亮屏" else "息屏"}")
+        Log.i(TAG, "  锁屏状态: ${if (diag.isLocked) "已锁" else "未锁"}")
+        Log.i(TAG, "--- 预期行为 ---")
+        Log.i(TAG, "  FullScreenIntent 预期: ${diag.expectedBehavior}")
+
+        if (diag.failureReasons.isNotEmpty()) {
+            Log.w(TAG, "--- 失败原因分析 ---")
+            diag.failureReasons.forEachIndexed { i, reason ->
+                Log.w(TAG, "  ${i + 1}. $reason")
+            }
+        } else {
+            Log.i(TAG, "--- 未检测到明显失败原因 ---")
+        }
+
+        if (diag.missingPermissions.isNotEmpty()) {
+            Log.w(TAG, "--- 缺失权限 ---")
+            diag.missingPermissions.forEach {
+                Log.w(TAG, "  - $it")
+            }
+        }
+        Log.i(TAG, "========== 诊断结束 ==========")
+    }
+
+    // ==================== FullScreenIntent 回退：手动启动 Activity + 诊断通知 ====================
+
+    private fun startAlarmActivityFallback(
+        eventContent: String,
+        daysRemaining: Long,
+        targetReached: Boolean,
+        diag: DiagnosticResult
+    ) {
+        Log.w(TAG, "=== FullScreenIntent 回退机制启动 ===")
+        Log.w(TAG, "AlarmActivity 未在 ${FULLSCREEN_FALLBACK_DELAY_MS}ms 内启动")
+        Log.w(TAG, "预期行为: ${diag.expectedBehavior}")
+
+        try {
+            val intent = android.content.Intent(this, com.countdown.app.ui.alarm.AlarmActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_EVENT_CONTENT, eventContent)
+                putExtra(EXTRA_DAYS_REMAINING, daysRemaining)
+                putExtra(EXTRA_TARGET_REACHED, targetReached)
+            }
+            startActivity(intent)
+            Log.i(TAG, "回退：AlarmActivity 已手动启动")
+        } catch (e: Exception) {
+            Log.e(TAG, "回退：手动启动 AlarmActivity 失败", e)
+            Log.e(TAG, "这通常是因为厂商系统限制了后台启动 Activity")
+            Log.e(TAG, "建议用户检查：")
+            Log.e(TAG, "  - 华为：应用启动管理 → 允许自启动 + 后台活动")
+            Log.e(TAG, "  - 小米：自启动管理 → 允许自启动")
+            Log.e(TAG, "  - OPPO/vivo：自启动/后台弹窗管理")
+
+            // 向用户显示诊断通知（不静默失败）
+            if (diag.failureReasons.isNotEmpty() || diag.missingPermissions.isNotEmpty()) {
+                NotificationHelper.showDiagnosticNotification(
+                    this,
+                    reasons = diag.failureReasons.ifEmpty {
+                        listOf(
+                            "厂商系统限制了后台启动 Activity",
+                            "当前设备: ${PermissionChecker.getDeviceBrand()}",
+                            "请在系统设置中允许本应用自启动和后台活动"
+                        )
+                    },
+                    missingPermissions = diag.missingPermissions
+                )
+            }
+        }
     }
 
     // ==================== 前台服务启动 ====================
@@ -134,7 +383,6 @@ class AlarmService : Service() {
     private fun startForegroundCompat(notification: Notification) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                // Android 14+ 必须指定前台服务类型
                 startForeground(
                     NotificationHelper.ALARM_NOTIFICATION_ID,
                     notification,
@@ -143,10 +391,9 @@ class AlarmService : Service() {
             } else {
                 startForeground(NotificationHelper.ALARM_NOTIFICATION_ID, notification)
             }
-            Log.d(TAG, "Foreground service started with unified alarm notification")
+            Log.d(TAG, "Foreground service started with alarm notification")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start foreground service", e)
-            // 降级：如果前台服务失败，至少尝试显示通知
             try {
                 val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 nm.notify(NotificationHelper.ALARM_NOTIFICATION_ID, notification)
@@ -156,12 +403,37 @@ class AlarmService : Service() {
         }
     }
 
+    /**
+     * 为 STOP 操作调用 startForeground
+     *
+     * 当通过 startForegroundService 启动服务时（即使服务已在运行），
+     * Android 8+ 要求在 onStartCommand 中必须调用 startForeground。
+     * 否则会抛出 ForegroundServiceDidNotStartInTimeException。
+     */
+    private fun startForegroundCompatForStop() {
+        try {
+            // 使用最小化通知满足 startForegroundService 要求，避免闪烁
+            val notification = NotificationHelper.buildStopNotification(this)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NotificationHelper.ALARM_NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(NotificationHelper.ALARM_NOTIFICATION_ID, notification)
+            }
+            Log.d(TAG, "startForeground called for STOP action (minimal notification)")
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground for STOP failed (service may already be stopping)", e)
+        }
+    }
+
     // ==================== 声音播放（带音频焦点） ====================
 
     private fun startSoundWithAudioFocus() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        // 请求音频焦点
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                 .setAudioAttributes(
@@ -201,7 +473,6 @@ class AlarmService : Service() {
         if (mediaPlayer != null) return
 
         try {
-            // 优先使用闹钟铃声，其次通知铃声
             val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
@@ -227,7 +498,6 @@ class AlarmService : Service() {
             Log.d(TAG, "Alarm sound started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start alarm sound", e)
-            // 降级：使用系统默认通知声音
             tryFallbackSound()
         }
     }
@@ -285,46 +555,51 @@ class AlarmService : Service() {
         }
     }
 
-    // ==================== WakeLock（防止设备休眠） ====================
+    // ==================== WakeLock ====================
 
-    private fun acquireWakeLock() {
+    /**
+     * PARTIAL_WAKE_LOCK：只保持 CPU 运行，不点亮屏幕
+     * 在 onCreate 时获取，确保闹钟逻辑能执行
+     */
+    private fun acquirePartialWakeLock() {
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                "CountdownApp:AlarmWakeLock"
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "CountdownApp:AlarmCpuWakeLock"
             )
-            wakeLock?.acquire(10 * 60 * 1000L) // 最长保持10分钟
-            Log.d(TAG, "WakeLock acquired")
+            wakeLock?.acquire(10 * 60 * 1000L)
+            Log.d(TAG, "Partial WakeLock acquired (CPU only)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to acquire wake lock", e)
+            Log.e(TAG, "Failed to acquire partial wake lock", e)
         }
     }
 
-    // ==================== 注册关闭广播接收器 ====================
-
-    private fun registerCloseReceiver() {
-        closeReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action == ACTION_CLOSE_ALARM_ACTIVITY) {
-                    Log.d(TAG, "Received CLOSE_ALARM_ACTIVITY broadcast")
-                    // AlarmActivity 会自行处理关闭，这里不需要做额外操作
-                }
-            }
-        }
-        val filter = IntentFilter(ACTION_CLOSE_ALARM_ACTIVITY)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(closeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(closeReceiver, filter)
+    /**
+     * SCREEN_BRIGHT_WAKE_LOCK：点亮屏幕并保持常亮
+     * 在通知发布后延迟获取，避免干扰 FullScreenIntent
+     */
+    private fun acquireScreenWakeLock() {
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            screenWakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "CountdownApp:AlarmScreenWakeLock"
+            )
+            screenWakeLock?.acquire(10 * 60 * 1000L)
+            Log.d(TAG, "Screen WakeLock acquired (screen on)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire screen wake lock", e)
         }
     }
 
     // ==================== 停止闹钟并清理所有资源 ====================
 
     private fun stopAlarmAndCleanup() {
-        Log.d(TAG, "Stopping alarm and cleaning up all resources")
+        Log.d(TAG, "=== 停止闹钟，清理所有资源 ===")
+
+        // 移除所有延迟任务
+        handler.removeCallbacksAndMessages(null)
 
         // 1. 停止并释放 MediaPlayer
         try {
@@ -369,35 +644,57 @@ class AlarmService : Service() {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing wake lock", e)
+            Log.e(TAG, "Error releasing partial wake lock", e)
         }
         wakeLock = null
 
-        // 5. 取消通知（使用统一 ID）
-        NotificationHelper.cancelAlarmNotification(this)
+        try {
+            screenWakeLock?.let { wl ->
+                if (wl.isHeld) {
+                    wl.release()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing screen wake lock", e)
+        }
+        screenWakeLock = null
 
-        // 6. 停止前台服务
+        // 5. 发送广播关闭 AlarmActivity（如果还在显示）
+        try {
+            val closeIntent = Intent(ACTION_CLOSE_ALARM_ACTIVITY).apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(closeIntent)
+            Log.d(TAG, "Sent close broadcast to AlarmActivity")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending close broadcast", e)
+        }
+
+        // 6. 取消所有闹钟相关通知（闹钟通知 + 诊断通知）
+        NotificationHelper.cancelAllAlarmNotifications(this)
+
+        // 7. 停止前台服务
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping foreground", e)
         }
 
-        // 7. 停止服务自身
+        // 8. 停止服务自身
         stopSelf()
 
-        Log.d(TAG, "Alarm stopped and all resources released")
+        Log.d(TAG, "=== 闹钟已停止，所有资源已释放 ===")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "AlarmService onDestroy")
-        // 确保资源被释放
+        handler.removeCallbacksAndMessages(null)
         try {
             mediaPlayer?.release()
             vibrator?.cancel()
             wakeLock?.let { if (it.isHeld) it.release() }
-            closeReceiver?.let { unregisterReceiver(it) }
+            screenWakeLock?.let { if (it.isHeld) it.release() }
         } catch (e: Exception) {
             Log.e(TAG, "Error in onDestroy cleanup", e)
         }
