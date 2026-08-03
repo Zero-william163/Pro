@@ -1086,6 +1086,7 @@ fun EditSettingsDialog(
     onDismiss: () -> Unit,
     onSave: (CountdownData) -> Unit
 ) {
+    var eventContent by remember { mutableStateOf(data.eventContent) }
     var targetDate by remember { mutableStateOf(data.targetDate) }
     var reminderHour by remember { mutableIntStateOf(data.reminderTimeHour) }
     var reminderMinute by remember { mutableIntStateOf(data.reminderTimeMinute) }
@@ -1103,6 +1104,21 @@ fun EditSettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                // ===== 事件名称 =====
+                SettingsSectionTitle("事件名称")
+
+                OutlinedTextField(
+                    value = eventContent,
+                    onValueChange = { eventContent = it },
+                    placeholder = { Text("输入事件名称，如：考试、生日、旅行…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
                 // ===== 日期与提醒分组 =====
                 SettingsSectionTitle("日期与提醒")
 
@@ -1217,12 +1233,15 @@ fun EditSettingsDialog(
                 onClick = {
                     onSave(
                         CountdownData(
-                            eventContent = data.eventContent,
+                            eventContent = eventContent.trim(),
                             targetDate = targetDate,
                             reminderTimeHour = reminderHour,
                             reminderTimeMinute = reminderMinute,
                             reminderEnabled = reminderEnabled,
-                            themeMode = themeMode
+                            themeMode = themeMode,
+                            ringtoneType = data.ringtoneType,
+                            ringtoneUri = data.ringtoneUri,
+                            ringtoneName = data.ringtoneName
                         )
                     )
                 },
