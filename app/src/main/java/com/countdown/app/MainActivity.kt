@@ -265,16 +265,25 @@ fun MainScreen(
     var showChangelogDialog by remember { mutableStateOf<UpdateInfo?>(null) }
     val mainLifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
 
-    // ===== 启动时自动检测更新（静默，6小时缓存） =====
+    // ===== 启动时自动检测更新（6小时缓存，有视觉反馈） =====
     LaunchedEffect(Unit) {
+        // 显示检测状态（帮助用户确认自动检测正在运行）
+        scope.launch { snackbarHostState.showSnackbar("正在检查更新…") }
         onCheckUpdateAuto { result ->
             when (result) {
                 is UpdateCheckResult.UpdateAvailable -> {
                     autoUpdateInfo = result.updateInfo
+                    scope.launch { snackbarHostState.showSnackbar("发现新版本 v${result.updateInfo.versionName}") }
                 }
-                is UpdateCheckResult.UpToDate -> { /* 静默 */ }
-                is UpdateCheckResult.LocalNewer -> { /* 静默 */ }
-                is UpdateCheckResult.Error -> { /* 静默 */ }
+                is UpdateCheckResult.UpToDate -> {
+                    scope.launch { snackbarHostState.showSnackbar("当前已是最新版本") }
+                }
+                is UpdateCheckResult.LocalNewer -> {
+                    scope.launch { snackbarHostState.showSnackbar("当前版本已是最新") }
+                }
+                is UpdateCheckResult.Error -> {
+                    scope.launch { snackbarHostState.showSnackbar("自动检查更新失败") }
+                }
             }
         }
     }
