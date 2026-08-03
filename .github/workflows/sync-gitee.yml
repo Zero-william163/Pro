@@ -40,7 +40,7 @@ jobs:
           fi
 
           GH_RELEASE=$(curl -s "https://api.github.com/repos/Zero-william163/Pro/releases/latest")
-          TAG_NAME=$(echo "$GH_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null || echo "")
+          TAG_NAME=$(echo "$GH_RELEASE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag_name',''))" 2>/dev/null || echo "")
 
           if [ -z "$TAG_NAME" ]; then
             echo "No GitHub release found"
@@ -53,7 +53,7 @@ jobs:
           EXISTING_ID=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','') if isinstance(d, dict) else '')" 2>/dev/null || echo "")
 
           if [ -n "$EXISTING_ID" ]; then
-            echo "Gitee already has release for $TAG_NAME (ID: $EXISTING_ID), skipping"
+            echo "Gitee already has release for $TAG_NAME, skipping"
             exit 0
           fi
 
@@ -65,14 +65,7 @@ jobs:
 
           if [ -n "$RELEASE_ID" ]; then
             echo "Created Gitee release with ID: $RELEASE_ID"
-            APK_URL=$(echo "$GH_RELEASE" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for asset in data.get('assets', []):
-    if asset['name'].endswith('.apk'):
-        print(asset['browser_download_url'])
-        break
-" 2>/dev/null || echo "")
+            APK_URL=$(echo "$GH_RELEASE" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(a['browser_download_url']) for a in d.get('assets',[]) if a['name'].endswith('.apk')] or print('')" 2>/dev/null || echo "")
 
             if [ -n "$APK_URL" ]; then
               echo "Downloading APK from: $APK_URL"
