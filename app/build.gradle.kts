@@ -12,8 +12,8 @@ android {
         applicationId = "com.countdown.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 191
-        versionName = "1.9.1"
+        versionCode = 192
+        versionName = "1.9.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
