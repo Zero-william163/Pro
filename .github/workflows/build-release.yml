@@ -38,20 +38,161 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Extract version info
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          VERSION_CODE=$(grep 'versionCode' app/build.gradle.kts | head -1 | sed 's/.*versionCode = //;s/[^0-9].*//')
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "Extracted: tag=$TAG_NAME version=$VERSION code=$VERSION_CODE"
+
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk \
+             app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk
+
+      - name: Get APK file size
+        id: apk_size
+        run: |
+          SIZE=$(stat -c%s app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk)
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+
+      - name: Calculate SHA256
+        id: sha256
+        run: |
+          HASH=$(sha256sum app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk | awk '{print $1}')
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk
           generate_release_notes: true
+          body: |
+            ## 版本 ${{ steps.version.outputs.version }}
+
+            ### 下载
+            - GitHub: 直接下载下方附件
+            - 国内镜像: 通过应用内更新自动选择最快源
+
+            ### SHA256
+            ```
+            ${{ steps.sha256.outputs.hash }}
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate version.json
+        run: |
+          python3 << 'PYEOF'
+          import json
+          import datetime
+
+          version = "${{ steps.version.outputs.version }}"
+          tag_name = "${{ steps.version.outputs.tag_name }}"
+          version_code = ${{ steps.version.outputs.version_code }}
+          apk_size = ${{ steps.apk_size.outputs.size }}
+          sha256 = "${{ steps.sha256.outputs.hash }}"
+          published_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          github_apk_url = f"https://github.com/Zero-william163/Pro/releases/download/{tag_name}/countdown-v{version}.apk"
+          gitee_apk_url = f"https://gitee.com/zero-william163/Pro/releases/download/{tag_name}/countdown-v{version}.apk"
+
+          data = {
+              "versionName": version,
+              "versionCode": version_code,
+              "versionTag": tag_name,
+              "releaseNotes": f"版本 {version} 更新",
+              "publishedAt": published_at,
+              "apkSize": apk_size,
+              "sha256": sha256,
+              "downloadUrls": [
+                  {
+                      "name": "Gitee",
+                      "url": gitee_apk_url,
+                      "region": "domestic"
+                  },
+                  {
+                      "name": "GitHub Proxy",
+                      "url": f"https://ghproxy.com/{github_apk_url}",
+                      "region": "domestic"
+                  },
+                  {
+                      "name": "Mirror",
+                      "url": f"https://mirror.ghproxy.com/{github_apk_url}",
+                      "region": "domestic"
+                  },
+                  {
+                      "name": "GitHub",
+                      "url": github_apk_url,
+                      "region": "international"
+                  }
+              ]
+          }
+
+          with open("version.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+
+          print("Generated version.json:")
+          with open("version.json", "r") as f:
+              print(f.read())
+          PYEOF
+
+      - name: Commit and push version.json
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add version.json
+          git commit -m "chore: update version.json for ${{ steps.version.outputs.tag_name }}" || echo "No changes to commit"
+          git push
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: app-release
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Sync to Gitee
+        if: ${{ secrets.GITEE_TOKEN != '' }}
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          git remote add gitee https://oauth2:${GITEE_TOKEN}@gitee.com/zero-william163/Pro.git || true
+          git push gitee main --force
+          git push gitee --tags --force
+          echo "===== Gitee 仓库同步完成 ====="
+
+      - name: Upload APK to Gitee Release
+        if: ${{ secrets.GITEE_TOKEN != '' }}
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/zero-william163/Pro/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"${GITEE_TOKEN}\",
+              \"tag_name\": \"${{ steps.version.outputs.tag_name }}\",
+              \"name\": \"${{ steps.version.outputs.tag_name }}\",
+              \"body\": \"Release ${{ steps.version.outputs.version }}\",
+              \"target_commitish\": \"main\"
+            }")
+          RELEASE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Created Gitee release ID: $RELEASE_ID"
+            curl -s -X POST "https://gitee.com/api/v5/repos/zero-william163/Pro/releases/${RELEASE_ID}/attach_files" \
+              -F "file=@app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk" \
+              -F "access_token=${GITEE_TOKEN}"
+            echo ""
+            echo "===== APK 已上传到 Gitee Release ====="
+          else
+            echo "Failed to create Gitee release: $RESPONSE"
+          fi
