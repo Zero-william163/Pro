@@ -2,14 +2,14 @@
   "versionName": "1.8.0",
   "versionCode": 180,
   "versionTag": "v1.8.0",
-  "releaseNotes": "## 商业级更新系统重构\n\n### 多更新源架构\n- 新增国内镜像源（Gitee Raw / Gitee API / jsDelivr CDN）\n- 自动测速选择最快下载源\n- 自动故障转移，GitHub 不可用时无缝切换\n- 4 个更新源依次保障，永不单点故障\n\n### 自动检测更新\n- 每次打开应用/回到前台自动静默检测\n- 6 小时缓存策略，避免频繁请求\n- 用户手动检查更新时忽略缓存\n\n### 更新体验优化\n- Material Design 3 风格更新 Banner\n- 支持立即更新/稍后提醒/忽略版本/查看更新日志\n- 已是最新版时静默完成，不打扰用户\n- 忽略版本后不再提醒，直到更高版本发布\n\n### 国内镜像自动同步\n- GitHub Release 发布后自动同步到 Gitee\n- version.json 自动更新，确保版本信息一致\n- 支持 SHA256 校验\n\n### 其他改进\n- 详细更新模块日志（检测时间/版本/源/测速/切换）\n- 全面异常处理，网络异常不崩溃",
-  "publishedAt": "2026-08-03T02:10:00Z",
+  "releaseNotes": "## 商业级更新系统重构\n\n### 多更新源架构\n- 新增国内镜像源（Gitee / jsDelivr CDN / GitHub Proxy）\n- 自动测速选择最快下载源\n- 自动故障转移，GitHub 不可用时无缝切换\n\n### 自动检测更新\n- 每次打开应用/回到前台自动静默检测\n- 6 小时缓存策略，避免频繁请求\n\n### 更新体验优化\n- Material Design 3 风格更新 Banner\n- 支持立即更新/稍后提醒/忽略版本/查看更新日志\n\n### 国内镜像自动同步\n- GitHub Release 发布后自动同步到 Gitee\n- version.json 自动更新\n- 支持 SHA256 校验",
+  "publishedAt": "2026-08-03T02:30:00Z",
   "apkSize": 11454128,
   "sha256": "3744b3519aede2a33fa02c577eec3d1f80212c13b30c7a1ad383f0e07998b70b",
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.0/app-release.apk",
       "region": "domestic"
     },
     {
