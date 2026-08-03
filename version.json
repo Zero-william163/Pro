@@ -1,30 +1,30 @@
 {
-  "versionName": "1.8.2",
-  "versionCode": 182,
-  "versionTag": "v1.8.2",
-  "releaseNotes": "## v1.8.2 - 修复点击更新无反应\n\n### 修复内容\n- 修复缓存路径下更新信息丢失下载地址的问题\n- 缓存重建 UpdateInfo 时正确恢复下载 URL 列表\n- 点击立即更新时如下载地址为空，自动重新获取\n- 添加用户反馈，不再静默失败",
-  "publishedAt": "2026-08-03T04:30:00Z",
+  "versionName": "1.8.3",
+  "versionCode": 183,
+  "versionTag": "v1.8.3",
+  "releaseNotes": "## v1.8.3\n\n### 更新内容\n- 更新系统功能验证版本\n- 修复缓存路径下更新信息丢失下载地址的问题\n- 优化下载超时和错误处理逻辑\n- 确保点击立即更新能正常触发下载",
+  "publishedAt": "2026-08-03T05:00:00Z",
   "apkSize": 11456884,
-  "sha256": "35c074fe9e883510c193c0ad2f5c0146bfb65d34220872bafbb0fcf6a662d015",
+  "sha256": "e88d756aeb3aaa1334a535f3df9e5a6c223c0e85db99b41b10318f2fe8bc623e",
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.2/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.3/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.3/countdown-v1.8.3.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.3/countdown-v1.8.3.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
+      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.3/countdown-v1.8.3.apk",
       "region": "international"
     }
   ]
