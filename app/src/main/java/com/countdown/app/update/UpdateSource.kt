@@ -304,7 +304,7 @@ class GiteeRawSource(
             val request = Request.Builder()
                 .url(rawUrl)
                 .header("Accept", "application/json")
-                .header("User-Agent", "CountdownApp/UpdateChecker")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -314,6 +314,10 @@ class GiteeRawSource(
             }
 
             val body = response.body?.string() ?: return null
+            if (body.isBlank() || body.startsWith("<")) {
+                UpdateLogger.w(name, "Raw 文件内容异常，可能是重定向页面")
+                return null
+            }
             parseVersionJson(body)
         } catch (e: Exception) {
             UpdateLogger.e(name, "请求失败", e)
