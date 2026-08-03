@@ -1,30 +1,30 @@
 {
-  "versionName": "1.8.1",
-  "versionCode": 181,
-  "versionTag": "v1.8.1",
-  "releaseNotes": "## v1.8.1 - 修复下载失败问题\n\n### 修复内容\n- 移除已失效的 ghproxy.com 和 mirror.ghproxy.com 代理\n- 替换为可用的 gh-proxy.com 和 ghfast.top 代理\n- 修复 version.json 中 Gitee APK 文件名错误\n- 增加下载超时时间，优化国内网络体验\n- 测速改用 GET + Range 代替 HEAD，兼容性更好\n- 超时/连接失败直接切换源，不浪费时间\n- GiteeApiSource 增加 GitHub 代理备用源\n- 调整更新源优先级：Gitee Raw 优先（国内最稳定）",
-  "publishedAt": "2026-08-03T03:25:00Z",
-  "apkSize": 11455080,
-  "sha256": "2cdbbb04c9164ba61fb86c0a64a1190af731706ba1115708b5f867b794db9683",
+  "versionName": "1.8.2",
+  "versionCode": 182,
+  "versionTag": "v1.8.2",
+  "releaseNotes": "## v1.8.2 - 修复点击更新无反应\n\n### 修复内容\n- 修复缓存路径下更新信息丢失下载地址的问题\n- 缓存重建 UpdateInfo 时正确恢复下载 URL 列表\n- 点击立即更新时如下载地址为空，自动重新获取\n- 添加用户反馈，不再静默失败",
+  "publishedAt": "2026-08-03T04:30:00Z",
+  "apkSize": 11456884,
+  "sha256": "35c074fe9e883510c193c0ad2f5c0146bfb65d34220872bafbb0fcf6a662d015",
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.1/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.2/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
+      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.2/countdown-v1.8.2.apk",
       "region": "international"
     }
   ]

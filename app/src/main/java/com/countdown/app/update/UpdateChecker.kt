@@ -90,10 +90,11 @@ object UpdateChecker {
         // 检查缓存
         if (!prefs.shouldCheckUpdate()) {
             UpdateLogger.logCacheHit(prefs.getLastCheckTime(), prefs.hoursSinceLastCheck())
-            // 使用缓存的版本信息
+            // 使用缓存的版本信息（重建完整的 UpdateInfo，包含下载地址）
             val cachedVersion = prefs.getCachedVersionName()
             if (cachedVersion != null) {
-                val result = compareVersions(installedVersion, cachedVersion, "Cache")
+                val cachedInfo = buildCachedUpdateInfo(prefs, cachedVersion)
+                val result = compareVersions(installedVersion, cachedInfo, "Cache")
                 if (result is UpdateCheckResult.UpdateAvailable) {
                     // 检查是否被忽略
                     if (prefs.isVersionIgnored(result.updateInfo.versionName)) {
@@ -251,6 +252,29 @@ object UpdateChecker {
     }
 
     // ===== 内部方法 =====
+
+    /**
+     * 从缓存重建完整的 UpdateInfo（包含下载地址）。
+     *
+     * 缓存中存储了版本名、下载地址等信息，
+     * 此方法将它们重新组装为 UpdateInfo 对象。
+     */
+    private fun buildCachedUpdateInfo(prefs: UpdatePreferences, versionName: String): UpdateInfo {
+        val cachedUrls = prefs.getCachedDownloadUrls()
+        val downloadSources = cachedUrls.mapIndexed { index, url ->
+            DownloadSource("Source${index + 1}", url, if (index == 0) "domestic" else "international")
+        }
+        return UpdateInfo(
+            versionName = versionName,
+            versionCode = 0,
+            versionTag = "v$versionName",
+            releaseNotes = "",
+            publishedAt = "",
+            apkSize = 0,
+            sha256 = null,
+            downloadUrls = downloadSources
+        )
+    }
 
     /**
      * 执行实际的更新检查（从多源获取版本信息）。

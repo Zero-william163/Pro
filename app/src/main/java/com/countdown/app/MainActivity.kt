@@ -415,6 +415,26 @@ fun MainScreen(
                             onStartDownload(urls, info.versionName)
                             autoUpdateInfo = null
                             scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
+                        } else {
+                            // 下载地址为空，重新检测获取完整信息
+                            scope.launch { snackbarHostState.showSnackbar("正在获取下载地址…") }
+                            onCheckUpdateAuto { result ->
+                                when (result) {
+                                    is UpdateCheckResult.UpdateAvailable -> {
+                                        val newUrls = result.updateInfo.getAllDownloadUrls()
+                                        if (newUrls.isNotEmpty()) {
+                                            onStartDownload(newUrls, result.updateInfo.versionName)
+                                            autoUpdateInfo = null
+                                            scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
+                                        } else {
+                                            scope.launch { snackbarHostState.showSnackbar("无法获取下载地址，请稍后重试") }
+                                        }
+                                    }
+                                    else -> {
+                                        scope.launch { snackbarHostState.showSnackbar("无法获取下载地址，请稍后重试") }
+                                    }
+                                }
+                            }
                         }
                     },
                     onLater = { autoUpdateInfo = null },
