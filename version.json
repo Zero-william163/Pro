@@ -1,15 +1,15 @@
 {
-  "versionName": "1.9.0",
-  "versionCode": 190,
-  "versionTag": "v1.9.0",
-  "releaseNotes": "## v1.9.0 - 事件名称可编辑\n\n编辑设置新增事件名称输入框，可自由修改倒计时事件名。\n\n- 编辑设置顶部新增事件名称输入框\n- 修改后主屏幕卡片和桌面小组件同步显示\n- 修复保存设置时铃声配置被重置的问题",
-  "publishedAt": "2026-08-03T07:00:00Z",
-  "apkSize": 11458068,
-  "sha256": "f9ca00dab4d8ef4605c3db960921068696a2e5ce0a9852f4fede0c940ad6ebe2",
+  "versionName": "1.9.1",
+  "versionCode": 191,
+  "versionTag": "v1.9.1",
+  "releaseNotes": "## v1.9.1 - 修复更新检测缓存问题\n\n移除更新缓存策略，每次启动都做真实网络检测，确保始终检测到最新版本。",
+  "publishedAt": "2026-08-03T07:20:00Z",
+  "apkSize": 11457964,
+  "sha256": "47870c1f68edc60669918eed1b2f4fbd9eaee27cd825f678d010cc9f56c8a6a9",
   "downloadUrls": [
-    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.9.0/app-release.apk","region":"domestic"},
-    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.9.0/countdown-v1.9.0.apk","region":"domestic"},
-    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.9.0/countdown-v1.9.0.apk","region":"domestic"},
-    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.9.0/countdown-v1.9.0.apk","region":"international"}
+    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.9.1/app-release.apk","region":"domestic"},
+    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"domestic"},
+    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"domestic"},
+    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"international"}
   ]
 }
