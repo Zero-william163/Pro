@@ -1,31 +1,31 @@
 {
-  "versionName": "1.7.0",
-  "versionCode": 170,
-  "versionTag": "v1.7.0",
-  "releaseNotes": "## 应用图标全新设计\n\n### 图标改进\n- 背景: 蓝→紫→粉鲜艳渐变\n- 前景: 大胆粗壮的沙漏设计\n- 单色图标与前景设计完全一致\n\n### 设计理念\n参考微信、WPS等国际一线应用的图标设计语言",
-  "publishedAt": "2026-08-03T10:00:00Z",
+  "versionName": "1.8.0",
+  "versionCode": 180,
+  "versionTag": "v1.8.0",
+  "releaseNotes": "## 商业级更新系统重构\n\n### 多更新源架构\n- 新增国内镜像源（Gitee Raw / Gitee API / jsDelivr CDN）\n- 自动测速选择最快下载源\n- 自动故障转移，GitHub 不可用时无缝切换\n- 4 个更新源依次保障，永不单点故障\n\n### 自动检测更新\n- 每次打开应用/回到前台自动静默检测\n- 6 小时缓存策略，避免频繁请求\n- 用户手动检查更新时忽略缓存\n\n### 更新体验优化\n- Material Design 3 风格更新 Banner\n- 支持立即更新/稍后提醒/忽略版本/查看更新日志\n- 已是最新版时静默完成，不打扰用户\n- 忽略版本后不再提醒，直到更高版本发布\n\n### 国内镜像自动同步\n- GitHub Release 发布后自动同步到 Gitee\n- version.json 自动更新，确保版本信息一致\n- 支持 SHA256 校验\n\n### 其他改进\n- 详细更新模块日志（检测时间/版本/源/测速/切换）\n- 全面异常处理，网络异常不崩溃",
+  "publishedAt": "2026-08-03T12:00:00Z",
   "apkSize": 0,
   "sha256": "",
   "downloadUrls": [
     {
-      "name": "GitHub",
-      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
-      "region": "international"
+      "name": "Gitee",
+      "url": "https://gitee.com/zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "region": "domestic"
     },
     {
       "name": "GitHub Proxy",
-      "url": "https://ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "url": "https://ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
       "region": "domestic"
     },
     {
       "name": "Mirror",
-      "url": "https://mirror.ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "url": "https://mirror.ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
       "region": "domestic"
     },
     {
-      "name": "Gitee",
-      "url": "https://gitee.com/zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
-      "region": "domestic"
+      "name": "GitHub",
+      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "region": "international"
     }
   ]
 }

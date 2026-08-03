@@ -31,12 +31,13 @@ class UpdateSourceManager {
 
     init {
         sources = listOf(
-            GitHubApiSource("Zero-william163", "Pro"),
-            JSDelivrSource("Zero-william163", "Pro", "main"),
-            GiteeApiSource("zero-william163", "Pro")
+            GitHubApiSource("Zero-william163", "Pro"),       // priority=1, 官方源
+            GiteeRawSource("zero-william163", "Pro", "main"), // priority=2, 国内直读 version.json
+            JSDelivrSource("Zero-william163", "Pro", "main"), // priority=3, CDN 加速
+            GiteeApiSource("zero-william163", "Pro")          // priority=4, Gitee API
         ).sortedBy { it.priority }
 
-        UpdateLogger.i("SourceManager", "已注册 ${sources.size} 个更新源: ${sources.joinToString { "${it.name}(${it.region})" }}")
+        UpdateLogger.i("SourceManager", "已注册 ${sources.size} 个更新源: ${sources.joinToString { "${it.name}(${it.region},P${it.priority})" }}")
     }
 
     /**

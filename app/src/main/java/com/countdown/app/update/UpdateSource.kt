@@ -150,8 +150,8 @@ class JSDelivrSource(
 ) : UpdateSource {
 
     override val name = "jsDelivr"
-    override val priority = 2
-    override val region = "domestic"
+    override val priority = 4
+    override val region = "cdn"
 
     private val jsonUrl get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/version.json"
 
@@ -194,7 +194,7 @@ class GiteeApiSource(
 ) : UpdateSource {
 
     override val name = "Gitee"
-    override val priority = 3
+    override val priority = 5
     override val region = "domestic"
 
     private val apiUrl get() = "https://gitee.com/api/v5/repos/$owner/$repo/releases/latest"
@@ -271,6 +271,54 @@ class GiteeApiSource(
             code = code * 100 + (part.toIntOrNull() ?: 0)
         }
         return code
+    }
+}
+
+// ============================================================
+// Gitee Raw 源（国内镜像，直接读取 version.json）
+// ============================================================
+
+/**
+ * Gitee Raw 更新源。
+ *
+ * 通过 Gitee 的 raw 文件接口直接读取仓库中的 version.json。
+ * 比 Gitee API 更稳定（无速率限制），适合国内用户。
+ *
+ * version.json 包含完整的版本信息和所有下载地址，
+ * 确保所有源返回的版本信息完全一致。
+ */
+class GiteeRawSource(
+    private val owner: String,
+    private val repo: String,
+    private val branch: String = "main"
+) : UpdateSource {
+
+    override val name = "Gitee Raw"
+    override val priority = 3
+    override val region = "domestic"
+
+    private val rawUrl get() = "https://gitee.com/$owner/$repo/raw/$branch/version.json"
+
+    override fun fetch(client: OkHttpClient): UpdateInfo? {
+        return try {
+            val request = Request.Builder()
+                .url(rawUrl)
+                .header("Accept", "application/json")
+                .header("User-Agent", "CountdownApp/UpdateChecker")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                UpdateLogger.w(name, "Raw 文件返回错误码: ${response.code}")
+                return null
+            }
+
+            val body = response.body?.string() ?: return null
+            parseVersionJson(body)
+        } catch (e: Exception) {
+            UpdateLogger.e(name, "请求失败", e)
+            null
+        }
     }
 }
 
