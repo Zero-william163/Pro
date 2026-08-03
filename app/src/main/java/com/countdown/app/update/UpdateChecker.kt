@@ -87,6 +87,9 @@ object UpdateChecker {
 
         UpdateLogger.logCheckStart(installedVersion.versionName)
 
+        // 应用版本变化时清除旧缓存
+        prefs.invalidateCacheIfVersionChanged(installedVersion.versionName)
+
         // 检查缓存
         if (!prefs.shouldCheckUpdate()) {
             UpdateLogger.logCacheHit(prefs.getLastCheckTime(), prefs.hoursSinceLastCheck())
@@ -95,6 +98,11 @@ object UpdateChecker {
             if (cachedVersion != null) {
                 val cachedInfo = buildCachedUpdateInfo(prefs, cachedVersion)
                 val result = compareVersions(installedVersion, cachedInfo, "Cache")
+
+                // 关键：只有当缓存显示"有更新可用"时才使用缓存
+                // 如果缓存显示"已是最新"或"本地更高"，缓存可能已过期
+                // （因为新版本可能已发布，或者用户刚更新了应用）
+                // 此时必须强制发起真实网络检测
                 if (result is UpdateCheckResult.UpdateAvailable) {
                     // 检查是否被忽略
                     if (prefs.isVersionIgnored(result.updateInfo.versionName)) {
@@ -105,9 +113,13 @@ object UpdateChecker {
                             "Cache"
                         )
                     }
+                    UpdateLogger.logCheckResult(result::class.simpleName ?: "Unknown")
+                    return@withContext result
+                } else {
+                    // 缓存显示无更新，但缓存可能已过期，强制真实检测
+                    UpdateLogger.i(TAG, "缓存显示无更新，但可能已过期，强制真实检测")
+                    prefs.clearCache()
                 }
-                UpdateLogger.logCheckResult(result::class.simpleName ?: "Unknown")
-                return@withContext result
             }
         } else {
             UpdateLogger.logCacheMiss(prefs.hoursSinceLastCheck())

@@ -1,31 +1,15 @@
 {
-  "versionName": "1.8.4",
-  "versionCode": 184,
-  "versionTag": "v1.8.4",
-  "releaseNotes": "## v1.8.4\n\n### 更新内容\n- 自动更新检测功能验证版本\n- 修复 jsDelivr CDN 缓存导致的版本检测问题\n- 优化多源更新检测逻辑",
-  "publishedAt": "2026-08-03T05:30:00Z",
-  "apkSize": 11456884,
-  "sha256": "64b221a838b66d8c34f7718ecabdc4c4b2752fd5f3d94287e8195e23c5c1eb6e",
+  "versionName": "1.8.5",
+  "versionCode": 185,
+  "versionTag": "v1.8.5",
+  "releaseNotes": "## v1.8.5 - 修复自动检测更新\n\n### 修复内容\n- 修复缓存导致自动检测更新失败的问题\n- 缓存显示\"无更新\"时不再信任，强制发起真实网络检测\n- 应用版本变化时自动清除旧缓存\n- 确保更新后能正确检测到新版本",
+  "publishedAt": "2026-08-03T06:00:00Z",
+  "apkSize": 11456416,
+  "sha256": "85ebe396fec827a05220973fdc301bd174077a6c4e51ca1591bd8d9f1356ebdc",
   "downloadUrls": [
-    {
-      "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.4/app-release.apk",
-      "region": "domestic"
-    },
-    {
-      "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.4/countdown-v1.8.4.apk",
-      "region": "domestic"
-    },
-    {
-      "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.4/countdown-v1.8.4.apk",
-      "region": "domestic"
-    },
-    {
-      "name": "GitHub",
-      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.4/countdown-v1.8.4.apk",
-      "region": "international"
-    }
+    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.8.5/app-release.apk","region":"domestic"},
+    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.5/countdown-v1.8.5.apk","region":"domestic"},
+    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.5/countdown-v1.8.5.apk","region":"domestic"},
+    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.8.5/countdown-v1.8.5.apk","region":"international"}
   ]
 }

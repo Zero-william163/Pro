@@ -25,6 +25,7 @@ class UpdatePreferences private constructor(context: Context) {
         private const val KEY_CACHED_RELEASE_NOTES = "cached_release_notes"
         private const val KEY_CACHED_DOWNLOAD_URLS = "cached_download_urls"
         private const val KEY_CACHED_PUBLISHED_AT = "cached_published_at"
+        private const val KEY_LAST_INSTALLED_VERSION = "last_installed_version"
 
         // 缓存有效时间：6 小时
         const val CACHE_DURATION_MS = 6 * 60 * 60 * 1000L
@@ -37,6 +38,27 @@ class UpdatePreferences private constructor(context: Context) {
                 instance ?: UpdatePreferences(context.applicationContext).also { instance = it }
             }
         }
+    }
+
+    /**
+     * 检查应用版本是否变化，如果变化则清除缓存。
+     * 应在每次启动时调用，确保旧版本缓存不会影响新版本。
+     */
+    fun invalidateCacheIfVersionChanged(currentVersionName: String) {
+        val lastVersion = prefs.getString(KEY_LAST_INSTALLED_VERSION, null)
+        if (lastVersion != null && lastVersion != currentVersionName) {
+            // 应用已更新，清除所有缓存
+            prefs.edit().apply {
+                remove(KEY_CACHED_VERSION_NAME)
+                remove(KEY_CACHED_VERSION_CODE)
+                remove(KEY_CACHED_RELEASE_NOTES)
+                remove(KEY_CACHED_DOWNLOAD_URLS)
+                remove(KEY_CACHED_PUBLISHED_AT)
+                remove(KEY_LAST_CHECK_TIME)
+            }.apply()
+        }
+        // 记录当前版本
+        prefs.edit().putString(KEY_LAST_INSTALLED_VERSION, currentVersionName).apply()
     }
 
     // ===== 上次检查时间 =====
