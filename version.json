@@ -1,15 +1,15 @@
 {
-  "versionName": "1.8.7",
-  "versionCode": 187,
-  "versionTag": "v1.8.7",
-  "releaseNotes": "## v1.8.7 - 自动检测更新测试版本\n\n用于测试自动检测更新功能是否正常工作。",
-  "publishedAt": "2026-08-03T04:35:00Z",
-  "apkSize": 11458560,
-  "sha256": "7d06ded5c9c312501dc4ba6d12fd0e26bf405dc901bae65c722d827971ff0a83",
+  "versionName": "1.8.8",
+  "versionCode": 188,
+  "versionTag": "v1.8.8",
+  "releaseNotes": "## v1.8.8 - 静默检测更新\n\n自动检测改为完全静默，不再显示任何提示，仅发现新版本时才显示更新横幅。",
+  "publishedAt": "2026-08-03T05:00:00Z",
+  "apkSize": 11456420,
+  "sha256": "98feb4b7bb612e5a6ae524e6fbd48fdfb7ad052a4b7c395a9bf7bb71a0b5e825",
   "downloadUrls": [
-    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.8.7/app-release.apk","region":"domestic"},
-    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.7/countdown-v1.8.7.apk","region":"domestic"},
-    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.7/countdown-v1.8.7.apk","region":"domestic"},
-    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.8.7/countdown-v1.8.7.apk","region":"international"}
+    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.8.8/app-release.apk","region":"domestic"},
+    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.8/countdown-v1.8.8.apk","region":"domestic"},
+    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.8/countdown-v1.8.8.apk","region":"domestic"},
+    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.8.8/countdown-v1.8.8.apk","region":"international"}
   ]
 }
