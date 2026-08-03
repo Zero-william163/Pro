@@ -68,11 +68,11 @@ object UpdateChecker {
     // ===== 公共 API =====
 
     /**
-     * 自动检测更新（有缓存策略）。
+     * 自动检测更新（每次启动都做真实网络检测，不使用缓存）。
      *
      * 适用场景：应用启动、回到前台。
      * 行为：
-     * - 6 小时内不重复请求
+     * - 每次都发起真实网络请求，确保获取最新版本信息
      * - 静默检测，不弹窗
      * - 有新版本时返回 UpdateAvailable（由 UI 决定是否显示 Banner）
      * - 已是最新版时静默返回 UpToDate
@@ -87,54 +87,14 @@ object UpdateChecker {
 
         UpdateLogger.logCheckStart(installedVersion.versionName)
 
-        // 应用版本变化时清除旧缓存
-        prefs.invalidateCacheIfVersionChanged(installedVersion.versionName)
-
-        // 检查缓存
-        if (!prefs.shouldCheckUpdate()) {
-            UpdateLogger.logCacheHit(prefs.getLastCheckTime(), prefs.hoursSinceLastCheck())
-            // 使用缓存的版本信息（重建完整的 UpdateInfo，包含下载地址）
-            val cachedVersion = prefs.getCachedVersionName()
-            if (cachedVersion != null) {
-                val cachedInfo = buildCachedUpdateInfo(prefs, cachedVersion)
-                val result = compareVersions(installedVersion, cachedInfo, "Cache")
-
-                // 关键：只有当缓存显示"有更新可用"时才使用缓存
-                // 如果缓存显示"已是最新"或"本地更高"，缓存可能已过期
-                // （因为新版本可能已发布，或者用户刚更新了应用）
-                // 此时必须强制发起真实网络检测
-                if (result is UpdateCheckResult.UpdateAvailable) {
-                    // 检查是否被忽略
-                    if (prefs.isVersionIgnored(result.updateInfo.versionName)) {
-                        UpdateLogger.logIgnoredVersion(result.updateInfo.versionName)
-                        return@withContext UpdateCheckResult.UpToDate(
-                            installedVersion.versionName,
-                            result.updateInfo.versionName,
-                            "Cache"
-                        )
-                    }
-                    UpdateLogger.logCheckResult(result::class.simpleName ?: "Unknown")
-                    return@withContext result
-                } else {
-                    // 缓存显示无更新，但缓存可能已过期，强制真实检测
-                    UpdateLogger.i(TAG, "缓存显示无更新，但可能已过期，强制真实检测")
-                    prefs.clearCache()
-                }
-            }
-        } else {
-            UpdateLogger.logCacheMiss(prefs.hoursSinceLastCheck())
-        }
+        // 清除旧缓存，确保每次都做真实检测
+        prefs.clearCache()
 
         // 执行实际检查
         val result = performCheck(installedVersion, context)
 
         // 更新最后检查时间
         prefs.updateLastCheckTime()
-
-        // 缓存结果
-        if (result is UpdateCheckResult.UpdateAvailable) {
-            prefs.cacheUpdateInfo(result.updateInfo)
-        }
 
         // 检查忽略版本
         if (result is UpdateCheckResult.UpdateAvailable) {
