@@ -1,30 +1,30 @@
 {
-  "versionName": "1.8.0",
-  "versionCode": 180,
-  "versionTag": "v1.8.0",
-  "releaseNotes": "## 商业级更新系统重构\n\n### 多更新源架构\n- 新增国内镜像源（Gitee / jsDelivr CDN / GitHub Proxy）\n- 自动测速选择最快下载源\n- 自动故障转移，GitHub 不可用时无缝切换\n\n### 自动检测更新\n- 每次打开应用/回到前台自动静默检测\n- 6 小时缓存策略，避免频繁请求\n\n### 更新体验优化\n- Material Design 3 风格更新 Banner\n- 支持立即更新/稍后提醒/忽略版本/查看更新日志\n\n### 国内镜像自动同步\n- GitHub Release 发布后自动同步到 Gitee\n- version.json 自动更新\n- 支持 SHA256 校验",
-  "publishedAt": "2026-08-03T02:30:00Z",
-  "apkSize": 11454128,
-  "sha256": "3744b3519aede2a33fa02c577eec3d1f80212c13b30c7a1ad383f0e07998b70b",
+  "versionName": "1.8.1",
+  "versionCode": 181,
+  "versionTag": "v1.8.1",
+  "releaseNotes": "## v1.8.1 - 修复下载失败问题\n\n### 修复内容\n- 移除已失效的 ghproxy.com 和 mirror.ghproxy.com 代理\n- 替换为可用的 gh-proxy.com 和 ghfast.top 代理\n- 修复 version.json 中 Gitee APK 文件名错误\n- 增加下载超时时间，优化国内网络体验\n- 测速改用 GET + Range 代替 HEAD，兼容性更好\n- 超时/连接失败直接切换源，不浪费时间\n- GiteeApiSource 增加 GitHub 代理备用源\n- 调整更新源优先级：Gitee Raw 优先（国内最稳定）",
+  "publishedAt": "2026-08-03T03:25:00Z",
+  "apkSize": 11455080,
+  "sha256": "2cdbbb04c9164ba61fb86c0a64a1190af731706ba1115708b5f867b794db9683",
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.0/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/Pro/releases/download/v1.8.1/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.0/countdown-v1.8.0.apk",
+      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.8.1/countdown-v1.8.1.apk",
       "region": "international"
     }
   ]

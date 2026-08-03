@@ -23,10 +23,21 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release-keystore.jks")
-            storePassword = "countdown2026"
-            keyAlias = "countdown-release"
-            keyPassword = "countdown2026"
+            // 支持从环境变量读取签名信息（CI/CD 环境）
+            // 本地构建使用 keystore 文件
+            val keystoreFile = file("release-keystore.jks")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "countdown2026"
+                keyAlias = "countdown-release"
+                keyPassword = "countdown2026"
+            } else {
+                // CI 环境：从环境变量读取
+                storeFile = file(System.getenv("KEYSTORE_PATH") ?: "release-keystore.jks")
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "countdown2026"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "countdown-release"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "countdown2026"
+            }
         }
     }
 
