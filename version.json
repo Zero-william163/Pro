@@ -1,0 +1,31 @@
+{
+  "versionName": "1.7.0",
+  "versionCode": 170,
+  "versionTag": "v1.7.0",
+  "releaseNotes": "## 应用图标全新设计\n\n### 图标改进\n- 背景: 蓝→紫→粉鲜艳渐变\n- 前景: 大胆粗壮的沙漏设计\n- 单色图标与前景设计完全一致\n\n### 设计理念\n参考微信、WPS等国际一线应用的图标设计语言",
+  "publishedAt": "2026-08-03T10:00:00Z",
+  "apkSize": 0,
+  "sha256": "",
+  "downloadUrls": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "region": "international"
+    },
+    {
+      "name": "GitHub Proxy",
+      "url": "https://ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "region": "domestic"
+    },
+    {
+      "name": "Mirror",
+      "url": "https://mirror.ghproxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "region": "domestic"
+    },
+    {
+      "name": "Gitee",
+      "url": "https://gitee.com/zero-william163/Pro/releases/download/v1.7.0/countdown-v1.7.0.apk",
+      "region": "domestic"
+    }
+  ]
+}

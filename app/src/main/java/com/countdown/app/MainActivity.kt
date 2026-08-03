@@ -113,6 +113,10 @@ import com.countdown.app.ui.permission.PermissionActivity
 import com.countdown.app.ui.ringtone.RingtoneSettingsActivity
 import com.countdown.app.ui.theme.CountdownTheme
 import com.countdown.app.update.UpdateChecker
+import com.countdown.app.update.UpdateCheckResult
+import com.countdown.app.update.UpdateInfo
+import com.countdown.app.update.UpdateLogger
+import com.countdown.app.update.UpdatePreferences
 import com.countdown.app.util.AlarmScheduler
 import com.countdown.app.util.DateCalculator
 import com.countdown.app.util.NotificationHelper
@@ -179,12 +183,21 @@ class MainActivity : ComponentActivity() {
                                 onUpdateCheckResult(result)
                             }
                         },
-                        onStartDownload = { url, versionName ->
+                        onCheckUpdateAuto = { onAutoCheckResult ->
+                            lifecycleScope.launch {
+                                val result = UpdateChecker.checkUpdateAuto(this@MainActivity)
+                                onAutoCheckResult(result)
+                            }
+                        },
+                        onStartDownload = { urls, versionName ->
                             val intent = Intent(this, DownloadService::class.java).apply {
-                                putExtra(DownloadService.EXTRA_DOWNLOAD_URL, url)
+                                putExtra(DownloadService.EXTRA_DOWNLOAD_URLS, urls.toTypedArray())
                                 putExtra(DownloadService.EXTRA_VERSION_NAME, versionName)
                             }
                             ContextCompat.startForegroundService(this, intent)
+                        },
+                        onIgnoreVersion = { version ->
+                            UpdateChecker.ignoreVersion(this@MainActivity, version)
                         },
                         onUpdateWidget = {
                             CountdownWidgetReceiver.updateAllWidgets(this@MainActivity)
@@ -211,7 +224,9 @@ fun MainScreen(
     onOpenPermissionCenter: () -> Unit,
     onOpenRingtoneSettings: () -> Unit,
     onCheckUpdate: ((Result<UpdateChecker.UpdateResult>) -> Unit) -> Unit,
-    onStartDownload: (String, String) -> Unit,
+    onCheckUpdateAuto: ((UpdateCheckResult) -> Unit) -> Unit,
+    onStartDownload: (List<String>, String) -> Unit,
+    onIgnoreVersion: (String) -> Unit,
     onUpdateWidget: () -> Unit
 ) {
     val context = LocalContext.current
@@ -239,12 +254,49 @@ fun MainScreen(
         }
     }
 
-    // 从设置页面返回时自动刷新权限状态
+    var showSettings by remember { mutableStateOf(false) }
+    var showEditSettings by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var showWidgetPrompt by remember { mutableStateOf(false) }
+
+    // ===== 自动检测更新状态 =====
+    var autoUpdateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showChangelogDialog by remember { mutableStateOf<UpdateInfo?>(null) }
     val mainLifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+
+    // ===== 启动时自动检测更新（静默，6小时缓存） =====
+    LaunchedEffect(Unit) {
+        onCheckUpdateAuto { result ->
+            when (result) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    autoUpdateInfo = result.updateInfo
+                }
+                is UpdateCheckResult.UpToDate -> { /* 静默 */ }
+                is UpdateCheckResult.LocalNewer -> { /* 静默 */ }
+                is UpdateCheckResult.Error -> { /* 静默 */ }
+            }
+        }
+    }
+
+    // ===== 应用回到前台时自动检测更新 =====
     DisposableEffect(mainLifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 refreshPermissions()
+                // 自动检测更新（有6小时缓存，不会频繁请求）
+                onCheckUpdateAuto { result ->
+                    when (result) {
+                        is UpdateCheckResult.UpdateAvailable -> {
+                            autoUpdateInfo = result.updateInfo
+                        }
+                        is UpdateCheckResult.UpToDate -> {
+                            autoUpdateInfo = null
+                        }
+                        is UpdateCheckResult.LocalNewer -> { /* 静默 */ }
+                        is UpdateCheckResult.Error -> { /* 静默 */ }
+                    }
+                }
             }
         }
         mainLifecycleOwner.lifecycle.addObserver(observer)
@@ -252,12 +304,6 @@ fun MainScreen(
             mainLifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-
-    var showSettings by remember { mutableStateOf(false) }
-    var showEditSettings by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf<UpdateChecker.UpdateResult.UpdateAvailable?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var showWidgetPrompt by remember { mutableStateOf(false) }
 
     // ===== 启动时检测桌面小组件（真实检测，不使用 SharedPreferences） =====
     // 仅在应用启动时检测一次：如果桌面没有小组件且提醒已启用，才提示用户添加
@@ -355,6 +401,29 @@ fun MainScreen(
                 PermissionWarningCard(
                     onClick = onOpenPermissionCenter,
                     missingCount = permissionResult.items.count { it.isCritical && !it.isGranted }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // ===== 自动检测更新 Banner =====
+            autoUpdateInfo?.let { info ->
+                UpdateBanner(
+                    updateInfo = info,
+                    onUpdate = {
+                        val urls = info.getAllDownloadUrls()
+                        if (urls.isNotEmpty()) {
+                            onStartDownload(urls, info.versionName)
+                            autoUpdateInfo = null
+                            scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
+                        }
+                    },
+                    onLater = { autoUpdateInfo = null },
+                    onIgnore = {
+                        onIgnoreVersion(info.versionName)
+                        autoUpdateInfo = null
+                        scope.launch { snackbarHostState.showSnackbar("已忽略此版本") }
+                    },
+                    onViewChangelog = { showChangelogDialog = info }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -532,7 +601,7 @@ fun MainScreen(
         )
     }
 
-    // ===== 更新对话框 =====
+    // ===== 更新对话框（手动检查触发） =====
     showUpdateDialog?.let { updateInfo ->
         AlertDialog(
             onDismissRequest = { showUpdateDialog = null },
@@ -555,10 +624,9 @@ fun MainScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onStartDownload(
-                        updateInfo.remoteVersion.downloadUrl,
-                        updateInfo.remoteVersion.tagName
-                    )
+                    val urls = updateInfo.updateInfo?.getAllDownloadUrls()
+                        ?: listOf(updateInfo.remoteVersion.downloadUrl)
+                    onStartDownload(urls, updateInfo.remoteVersion.tagName)
                     showUpdateDialog = null
                     scope.launch { snackbarHostState.showSnackbar("开始下载更新…") }
                 }) {
@@ -566,8 +634,46 @@ fun MainScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = null }) {
-                    Text("稍后")
+                Row {
+                    TextButton(onClick = {
+                        onIgnoreVersion(updateInfo.remoteVersion.tagName)
+                        showUpdateDialog = null
+                        scope.launch { snackbarHostState.showSnackbar("已忽略此版本") }
+                    }) {
+                        Text("忽略")
+                    }
+                    TextButton(onClick = { showUpdateDialog = null }) {
+                        Text("稍后")
+                    }
+                }
+            }
+        )
+    }
+
+    // ===== 更新日志对话框（从 Banner 查看） =====
+    showChangelogDialog?.let { info ->
+        AlertDialog(
+            onDismissRequest = { showChangelogDialog = null },
+            title = { Text("更新日志 v${info.versionName}") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        info.releaseNotes.ifBlank { "暂无更新日志" },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (info.publishedAt.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "发布时间: ${info.publishedAt}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showChangelogDialog = null }) {
+                    Text("关闭")
                 }
             }
         )
@@ -750,11 +856,120 @@ fun SimplePermissionCard(text: String, onClick: () -> Unit) {
     }
 }
 
+// ==================== 更新 Banner 组件 ====================
+
+/**
+ * 更新提示 Banner（Material Design 3 风格）。
+ *
+ * 轻量、美观、不打断用户操作。
+ * 显示在首页顶部，用户可以：
+ * - 立即更新
+ * - 稍后提醒
+ * - 忽略本次版本
+ * - 查看更新日志
+ */
+@Composable
+fun UpdateBanner(
+    updateInfo: UpdateInfo,
+    onUpdate: () -> Unit,
+    onLater: () -> Unit,
+    onIgnore: () -> Unit,
+    onViewChangelog: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "updateBannerScale"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp,
+            pressedElevation = 1.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "发现新版本 v${updateInfo.versionName}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "点击立即更新，享受最新功能",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onIgnore) {
+                    Text("忽略", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
+                }
+                TextButton(onClick = onViewChangelog) {
+                    Text("更新日志")
+                }
+                TextButton(onClick = onLater) {
+                    Text("稍后")
+                }
+                Button(
+                    onClick = onUpdate,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text("立即更新")
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("设置", style = MaterialTheme.typography.headlineSmall) },
@@ -780,7 +995,15 @@ fun SettingsDialog(
                     icon = Icons.Default.Tag,
                     iconBgColor = Color(0xFF10B981),
                     title = "当前版本",
-                    subtitle = "1.6.9"
+                    subtitle = try {
+                        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            context.packageManager.getPackageInfo(context.packageName, 0)
+                        }
+                        pi.versionName ?: "未知"
+                    } catch (e: Exception) { "未知" }
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
