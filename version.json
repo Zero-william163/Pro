@@ -1,15 +1,15 @@
 {
-  "versionName": "1.9.1",
-  "versionCode": 191,
-  "versionTag": "v1.9.1",
-  "releaseNotes": "## v1.9.1 - 修复更新检测缓存问题\n\n移除更新缓存策略，每次启动都做真实网络检测，确保始终检测到最新版本。",
-  "publishedAt": "2026-08-03T07:20:00Z",
-  "apkSize": 11457964,
-  "sha256": "47870c1f68edc60669918eed1b2f4fbd9eaee27cd825f678d010cc9f56c8a6a9",
+  "versionName": "1.9.3",
+  "versionCode": 193,
+  "versionTag": "v1.9.3",
+  "releaseNotes": "## v1.9.3 - 智能地理检测\n\n### 新功能\n- **智能地理检测**：自动识别用户网络环境（国内/国际），优先使用最快的更新源\n  - 国内用户：优先 Gitee 源（Gitee Raw → Gitee API → jsDelivr CDN → GitHub API）\n  - 国际用户：优先 GitHub 源（GitHub API → jsDelivr CDN → Gitee Raw → Gitee API）\n- **APK 下载加速**：根据网络环境智能排序下载地址，国内用户优先 Gitee 下载\n\n### 优化\n- 并行网络探测，3秒内完成网络环境判定\n- 探测结果缓存，避免重复检测\n- 移除 6 小时缓存策略，每次启动都做真实网络检测",
+  "publishedAt": "2026-08-03T07:50:00Z",
+  "apkSize": 11458564,
+  "sha256": "fe25392606d635328f95510f094d30b719bf7053c026a1ac47f5dad680fcbbc3",
   "downloadUrls": [
-    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.9.1/app-release.apk","region":"domestic"},
-    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"domestic"},
-    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"domestic"},
-    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.9.1/countdown-v1.9.1.apk","region":"international"}
+    {"name":"Gitee","url":"https://gitee.com/Zero-william163/Pro/releases/download/v1.9.3/app-release.apk","region":"domestic"},
+    {"name":"GH Proxy","url":"https://gh-proxy.com/https://github.com/Zero-william163/Pro/releases/download/v1.9.3/app-release.apk","region":"domestic"},
+    {"name":"GH Fast","url":"https://ghfast.top/https://github.com/Zero-william163/Pro/releases/download/v1.9.3/app-release.apk","region":"domestic"},
+    {"name":"GitHub","url":"https://github.com/Zero-william163/Pro/releases/download/v1.9.3/app-release.apk","region":"international"}
   ]
 }
