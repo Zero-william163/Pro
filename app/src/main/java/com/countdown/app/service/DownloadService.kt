@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.countdown.app.update.UpdateLogger
@@ -30,7 +29,6 @@ import java.util.concurrent.TimeUnit
  * 功能：
  * - 支持多个下载源，自动测速选择最快的
  * - 下载失败自动切换到下一个源
- * - 断点续传支持
  * - 前台通知显示下载进度
  * - 下载完成自动触发安装
  * - 全面的异常处理，永不崩溃
@@ -49,11 +47,16 @@ class DownloadService : Service() {
         const val EXTRA_DOWNLOAD_URLS = "download_urls"
         const val EXTRA_VERSION_NAME = "version_name"
 
-        // 下载重试次数
-        private const val MAX_RETRIES = 3
+        // 下载重试次数（降低以避免在死源上浪费时间）
+        private const val MAX_RETRIES = 2
 
         // 测速超时（秒）
-        private const val SPEED_TEST_TIMEOUT = 5L
+        private const val SPEED_TEST_TIMEOUT = 10L
+
+        // 下载超时
+        private const val CONNECT_TIMEOUT = 60L
+        private const val READ_TIMEOUT = 300L
+        private const val WRITE_TIMEOUT = 60L
     }
 
     override fun onCreate() {
@@ -64,7 +67,6 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val versionName = intent?.getStringExtra(EXTRA_VERSION_NAME) ?: ""
 
-        // 支持多 URL 和单 URL 两种模式
         val urls = intent?.getStringArrayExtra(EXTRA_DOWNLOAD_URLS)?.toList()
         val singleUrl = intent?.getStringExtra(EXTRA_DOWNLOAD_URL)
 
@@ -103,27 +105,33 @@ class DownloadService : Service() {
             UpdateLogger.i(TAG, "  源${index + 1}: $url")
         }
 
-        // Step 1: 测速，选择最快的源
+        // Step 1: 测速，选择可用的源并排序
         val sortedUrls = speedTestAndSort(urls)
         UpdateLogger.i(TAG, "测速完成，优先级排序:")
         sortedUrls.forEachIndexed { index, url ->
             UpdateLogger.i(TAG, "  ${index + 1}. $url")
         }
 
+        if (sortedUrls.isEmpty()) {
+            UpdateLogger.e(TAG, "所有源测速均失败，使用原始顺序尝试下载")
+        }
+
+        // 如果测速全部失败，使用原始 URL 列表作为 fallback
+        val urlsToTry = if (sortedUrls.isNotEmpty()) sortedUrls else urls
+
         // Step 2: 依次尝试下载
-        for ((index, url) in sortedUrls.withIndex()) {
+        for ((index, url) in urlsToTry.withIndex()) {
             val sourceName = "源${index + 1}"
             UpdateLogger.logDownloadStart(url, sourceName)
 
             val success = tryDownload(url, versionName, sourceName)
             if (success) {
-                // 下载成功，结束服务
                 return
             }
 
             // 下载失败，切换到下一个源
-            if (index < sortedUrls.size - 1) {
-                UpdateLogger.logDownloadFallback(url, sortedUrls[index + 1], "下载失败")
+            if (index < urlsToTry.size - 1) {
+                UpdateLogger.logDownloadFallback(url, urlsToTry[index + 1], "下载失败")
                 updateProgressNotification(0, versionName, "切换下载源…")
             }
         }
@@ -137,35 +145,51 @@ class DownloadService : Service() {
     /**
      * 测速并排序下载地址。
      *
-     * 对每个 URL 发送 HEAD 请求，测量响应时间。
-     * 按延迟排序（快在前），测速失败的排到最后。
+     * 使用 GET + Range: bytes=0-0 请求（比 HEAD 更可靠，部分服务器不支持 HEAD）。
+     * 只返回测速成功的源，按延迟排序。
+     * 如果全部失败，返回空列表（调用方会 fallback 到原始顺序）。
      */
     private fun speedTestAndSort(urls: List<String>): List<String> {
         val client = OkHttpClient.Builder()
             .connectTimeout(SPEED_TEST_TIMEOUT, TimeUnit.SECONDS)
             .readTimeout(SPEED_TEST_TIMEOUT, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .build()
 
         val results = urls.map { url ->
             val startTime = System.currentTimeMillis()
             try {
-                val request = Request.Builder().url(url).head().build()
+                // 使用 GET + Range 代替 HEAD，兼容性更好
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Range", "bytes=0-0")
+                    .header("Accept", "application/octet-stream, application/vnd.android.package-archive, */*")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
+                    .get()
+                    .build()
+
                 val response = client.newCall(request).execute()
                 val latency = System.currentTimeMillis() - startTime
-                val success = response.isSuccessful
+                // 200 或 206 都算成功
+                val success = response.isSuccessful || response.code == 206
                 response.close()
                 UpdateLogger.logSpeedTest(url, latency, success)
                 Triple(url, latency, success)
             } catch (e: Exception) {
                 val latency = System.currentTimeMillis() - startTime
                 UpdateLogger.logSpeedTest(url, latency, false)
+                UpdateLogger.w(TAG, "测速失败: $url | ${e.message}")
                 Triple(url, latency, false)
             }
         }
 
-        // 成功的按延迟排序，失败的排到最后
-        return results.sortedWith(compareBy({ !it.third }, { it.second }))
+        // 只返回成功的源，按延迟排序
+        val successList = results.filter { it.third }
+            .sortedBy { it.second }
             .map { it.first }
+
+        return successList
     }
 
     /**
@@ -184,13 +208,18 @@ class DownloadService : Service() {
                 }
 
                 val client = OkHttpClient.Builder()
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(60, TimeUnit.SECONDS)
+                    .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
+                    .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+                    .writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .retryOnConnectionFailure(true)
                     .build()
 
                 val request = Request.Builder()
                     .url(url)
-                    .header("Accept", "application/octet-stream")
+                    .header("Accept", "application/octet-stream, application/vnd.android.package-archive, */*")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
                     .build()
 
                 val response = client.newCall(request).execute()
@@ -210,8 +239,9 @@ class DownloadService : Service() {
                     continue
                 }
 
-                val apkFile = File(externalCacheDir, "countdown_update_v$versionName.apk")
-                val startTime = System.currentTimeMillis()
+                // 清理旧的 APK 文件
+                val cacheDir = externalCacheDir ?: cacheDir
+                val apkFile = File(cacheDir, "countdown_update_v$versionName.apk")
 
                 // 断点续传：如果文件已存在且大小匹配，跳过下载
                 if (apkFile.exists() && totalBytes > 0 && apkFile.length() == totalBytes) {
@@ -223,7 +253,14 @@ class DownloadService : Service() {
                     return true
                 }
 
+                // 如果文件存在但大小不匹配，删除旧文件
+                if (apkFile.exists() && totalBytes > 0 && apkFile.length() != totalBytes) {
+                    UpdateLogger.i(TAG, "清理不完整的缓存文件 | 源: $sourceName | 缓存: ${apkFile.length()}, 预期: $totalBytes")
+                    apkFile.delete()
+                }
+
                 updateProgressNotification(0, versionName, "正在下载($sourceName)…")
+                val startTime = System.currentTimeMillis()
 
                 FileOutputStream(apkFile).use { output ->
                     val buffer = ByteArray(8192)
@@ -237,11 +274,18 @@ class DownloadService : Service() {
 
                         if (totalBytes > 0) {
                             val progress = ((downloadedBytes * 100) / totalBytes).toInt()
-                            // 每 500ms 更新一次通知，避免频繁刷新
                             val now = System.currentTimeMillis()
                             if (now - lastProgressUpdate > 500 || progress == 100) {
                                 updateProgressNotification(progress, versionName, "$progress%")
                                 UpdateLogger.logDownloadProgress(downloadedBytes, totalBytes, progress)
+                                lastProgressUpdate = now
+                            }
+                        } else {
+                            // 未知总大小时，显示已下载大小
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgressUpdate > 1000) {
+                                val mb = downloadedBytes / 1024 / 1024
+                                updateProgressNotification(0, versionName, "已下载 ${mb}MB ($sourceName)")
                                 lastProgressUpdate = now
                             }
                         }
@@ -258,6 +302,14 @@ class DownloadService : Service() {
                     continue
                 }
 
+                // 验证文件非空
+                if (apkFile.length() == 0L) {
+                    UpdateLogger.e(TAG, "下载文件为空 | 源: $sourceName")
+                    apkFile.delete()
+                    retryCount++
+                    continue
+                }
+
                 val totalTime = System.currentTimeMillis() - startTime
                 UpdateLogger.logDownloadSuccess(apkFile.absolutePath, totalTime)
                 showCompleteNotification(apkFile)
@@ -265,10 +317,26 @@ class DownloadService : Service() {
                 return true
 
             } catch (e: Exception) {
-                UpdateLogger.logDownloadFailed(url, e.message ?: "未知错误")
-                retryCount++
-                if (retryCount >= MAX_RETRIES) {
-                    return false
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                UpdateLogger.logDownloadFailed(url, errorMsg)
+                UpdateLogger.e(TAG, "下载异常 | 源: $sourceName | 错误: $errorMsg")
+
+                // 区分超时和其他错误
+                when {
+                    errorMsg.contains("timeout", ignoreCase = true) -> {
+                        UpdateLogger.w(TAG, "连接超时，切换到下一个源 | 源: $sourceName")
+                        return false // 超时直接切换源，不重试
+                    }
+                    errorMsg.contains("connect", ignoreCase = true) -> {
+                        UpdateLogger.w(TAG, "连接失败，切换到下一个源 | 源: $sourceName")
+                        return false // 连接失败直接切换源
+                    }
+                    else -> {
+                        retryCount++
+                        if (retryCount >= MAX_RETRIES) {
+                            return false
+                        }
+                    }
                 }
             }
         }
@@ -301,10 +369,6 @@ class DownloadService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
-    }
-
-    private fun updateProgress(progress: Int, versionName: String) {
-        notificationManager.notify(NOTIFICATION_ID, createProgressNotification(progress, versionName, "$progress%"))
     }
 
     private fun updateProgressNotification(progress: Int, versionName: String, contentText: String) {

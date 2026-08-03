@@ -20,8 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class UpdateSourceManager {
 
-    private val sourceConnectTimeout = 10L // 秒
-    private val sourceReadTimeout = 15L    // 秒
+    private val sourceConnectTimeout = 15L // 秒
+    private val sourceReadTimeout = 20L    // 秒
 
     /** 所有注册的更新源（按优先级排序） */
     private val sources: List<UpdateSource>
@@ -31,8 +31,8 @@ class UpdateSourceManager {
 
     init {
         sources = listOf(
-            GitHubApiSource("Zero-william163", "Pro"),       // priority=1, 官方源
-            GiteeRawSource("zero-william163", "Pro", "main"), // priority=2, 国内直读 version.json
+            GiteeRawSource("zero-william163", "Pro", "main"), // priority=1, 国内直读 version.json（最稳定）
+            GitHubApiSource("Zero-william163", "Pro"),       // priority=2, 官方源
             JSDelivrSource("Zero-william163", "Pro", "main"), // priority=3, CDN 加速
             GiteeApiSource("zero-william163", "Pro")          // priority=4, Gitee API
         ).sortedBy { it.priority }
@@ -47,6 +47,8 @@ class UpdateSourceManager {
         return OkHttpClient.Builder()
             .connectTimeout(sourceConnectTimeout, TimeUnit.SECONDS)
             .readTimeout(sourceReadTimeout, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .retryOnConnectionFailure(true)
             .build()
     }
@@ -154,8 +156,10 @@ class UpdateSourceManager {
      */
     fun speedTest(downloadUrls: List<DownloadSource>): List<SpeedTestResult> {
         val client = OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .build()
 
         val results = mutableListOf<SpeedTestResult>()
@@ -165,12 +169,14 @@ class UpdateSourceManager {
             try {
                 val request = Request.Builder()
                     .url(source.url)
-                    .head()
+                    .header("Range", "bytes=0-0")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
+                    .get()
                     .build()
 
                 val response = client.newCall(request).execute()
                 val latency = System.currentTimeMillis() - startTime
-                val success = response.isSuccessful
+                val success = response.isSuccessful || response.code == 206
 
                 response.close()
 

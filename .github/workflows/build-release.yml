@@ -104,7 +104,7 @@ jobs:
           published_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
           github_apk_url = f"https://github.com/Zero-william163/Pro/releases/download/{tag_name}/countdown-v{version}.apk"
-          gitee_apk_url = f"https://gitee.com/zero-william163/Pro/releases/download/{tag_name}/countdown-v{version}.apk"
+          gitee_apk_url = f"https://gitee.com/Zero-william163/Pro/releases/download/{tag_name}/app-release.apk"
 
           data = {
               "versionName": version,
@@ -121,13 +121,13 @@ jobs:
                       "region": "domestic"
                   },
                   {
-                      "name": "GitHub Proxy",
-                      "url": f"https://ghproxy.com/{github_apk_url}",
+                      "name": "GH Proxy",
+                      "url": f"https://gh-proxy.com/{github_apk_url}",
                       "region": "domestic"
                   },
                   {
-                      "name": "Mirror",
-                      "url": f"https://mirror.ghproxy.com/{github_apk_url}",
+                      "name": "GH Fast",
+                      "url": f"https://ghfast.top/{github_apk_url}",
                       "region": "domestic"
                   },
                   {
@@ -189,7 +189,7 @@ jobs:
           if [ -n "$RELEASE_ID" ]; then
             echo "Created Gitee release ID: $RELEASE_ID"
             curl -s -X POST "https://gitee.com/api/v5/repos/zero-william163/Pro/releases/${RELEASE_ID}/attach_files" \
-              -F "file=@app/build/outputs/apk/release/countdown-v${{ steps.version.outputs.version }}.apk" \
+              -F "file=@app/build/outputs/apk/release/app-release.apk" \
               -F "access_token=${GITEE_TOKEN}"
             echo ""
             echo "===== APK 已上传到 Gitee Release ====="

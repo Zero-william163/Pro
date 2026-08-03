@@ -69,11 +69,11 @@ jobs:
 
             if [ -n "$APK_URL" ]; then
               echo "Downloading APK from: $APK_URL"
-              curl -L -o /tmp/countdown.apk "$APK_URL"
+              curl -L -o /tmp/app-release.apk "$APK_URL"
               curl -s -X POST "https://gitee.com/api/v5/repos/zero-william163/Pro/releases/${RELEASE_ID}/attach_files" \
-                -F "file=@/tmp/countdown.apk" \
+                -F "file=@/tmp/app-release.apk" \
                 -F "access_token=${GITEE_TOKEN}"
-              echo "Uploaded APK to Gitee Release"
+              echo "Uploaded APK to Gitee Release as app-release.apk"
             fi
           else
             echo "Failed to create Gitee release: $RESPONSE"

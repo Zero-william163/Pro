@@ -46,7 +46,7 @@ class GitHubApiSource(
 ) : UpdateSource {
 
     override val name = "GitHub"
-    override val priority = 1
+    override val priority = 2
     override val region = "international"
 
     private val apiUrl get() = "https://api.github.com/repos/$owner/$repo/releases/latest"
@@ -56,6 +56,7 @@ class GitHubApiSource(
             val request = Request.Builder()
                 .url(apiUrl)
                 .header("Accept", "application/vnd.github.v3+json")
+                .header("User-Agent", "Countdown-App-Update-Checker")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -104,9 +105,9 @@ class GitHubApiSource(
         // 构建多下载源列表
         val downloadUrls = mutableListOf<DownloadSource>()
         downloadUrls.add(DownloadSource("GitHub", apkUrl, "international"))
-        // GitHub 代理（国内加速）
-        downloadUrls.add(DownloadSource("GitHub Proxy", "https://ghproxy.com/$apkUrl", "domestic"))
-        downloadUrls.add(DownloadSource("Mirror", "https://mirror.ghproxy.com/$apkUrl", "domestic"))
+        // GitHub 代理（国内加速）- 使用可用的代理服务
+        downloadUrls.add(DownloadSource("GH Proxy", "https://gh-proxy.com/$apkUrl", "domestic"))
+        downloadUrls.add(DownloadSource("GH Fast", "https://ghfast.top/$apkUrl", "domestic"))
 
         return UpdateInfo(
             versionName = versionName,
@@ -150,7 +151,7 @@ class JSDelivrSource(
 ) : UpdateSource {
 
     override val name = "jsDelivr"
-    override val priority = 4
+    override val priority = 3
     override val region = "cdn"
 
     private val jsonUrl get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/version.json"
@@ -190,11 +191,13 @@ class JSDelivrSource(
  */
 class GiteeApiSource(
     private val owner: String,
-    private val repo: String
+    private val repo: String,
+    private val githubOwner: String = "Zero-william163",
+    private val githubRepo: String = "Pro"
 ) : UpdateSource {
 
     override val name = "Gitee"
-    override val priority = 5
+    override val priority = 4
     override val region = "domestic"
 
     private val apiUrl get() = "https://gitee.com/api/v5/repos/$owner/$repo/releases/latest"
@@ -204,6 +207,7 @@ class GiteeApiSource(
             val request = Request.Builder()
                 .url(apiUrl)
                 .header("Accept", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -249,8 +253,15 @@ class GiteeApiSource(
             return null
         }
 
+        // 构建多下载源列表
         val downloadUrls = mutableListOf<DownloadSource>()
         downloadUrls.add(DownloadSource("Gitee", apkUrl, "domestic"))
+
+        // 补充 GitHub 代理源（作为备用）
+        val githubApkUrl = "https://github.com/$githubOwner/$githubRepo/releases/download/$rawTag/countdown-v$versionName.apk"
+        downloadUrls.add(DownloadSource("GH Proxy", "https://gh-proxy.com/$githubApkUrl", "domestic"))
+        downloadUrls.add(DownloadSource("GH Fast", "https://ghfast.top/$githubApkUrl", "domestic"))
+        downloadUrls.add(DownloadSource("GitHub", githubApkUrl, "international"))
 
         return UpdateInfo(
             versionName = versionName,
@@ -294,7 +305,7 @@ class GiteeRawSource(
 ) : UpdateSource {
 
     override val name = "Gitee Raw"
-    override val priority = 3
+    override val priority = 1
     override val region = "domestic"
 
     private val rawUrl get() = "https://gitee.com/$owner/$repo/raw/$branch/version.json"
